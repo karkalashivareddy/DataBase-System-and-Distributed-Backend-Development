@@ -28,9 +28,9 @@ const NAV = [
   {
     group: "Operations",
     items: [
-      { to: "/suppliers", label: "Suppliers", icon: Truck, key: "suppliers", soon: true },
-      { to: "/purchases", label: "Purchases", icon: ShoppingCart, key: "purchases", soon: true },
-      { to: "/sales", label: "Sales", icon: ShoppingBag, key: "sales", soon: true },
+      { to: "/suppliers", label: "Suppliers", icon: Truck, key: "suppliers" },
+      { to: "/purchases", label: "Purchases", icon: ShoppingCart, key: "purchases" },
+      { to: "/sales", label: "Sales", icon: ShoppingBag, key: "sales" },
     ],
   },
   {

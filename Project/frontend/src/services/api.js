@@ -3,8 +3,9 @@
 // be swapped to a fetch() call against the Express backend later without
 // touching the UI components. These are NOT real backend API calls.
 import { users as demoUsers, demoCredentials } from "../data/users";
-import { medicines as demoMedicines } from "../data/medicines";
+import { medicines as demoMedicines, suppliers as demoSuppliers } from "../data/medicines";
 import { batches as demoBatches } from "../data/batches";
+import { purchases as demoPurchases, sales as demoSales } from "../data/transactions";
 import {
   getKpis,
   getSalesTrend,
@@ -128,4 +129,61 @@ export async function getBatchesByMedicine(medicineId) {
 export async function createBatch(data) {
   await delay(150);
   return { ...data, id: `bat-${Date.now()}` };
+}
+
+// ---------- Suppliers (frontend demo state) ----------
+export async function getSuppliers() {
+  await delay(150);
+  return demoSuppliers;
+}
+
+export async function getSupplierById(id) {
+  await delay(100);
+  return demoSuppliers.find((s) => s.id === id) || null;
+}
+
+export async function createSupplier(data) {
+  await delay(150);
+  return { ...data, id: `sup-${Date.now()}` };
+}
+
+export async function updateSupplier(id, data) {
+  await delay(150);
+  return { id, ...data };
+}
+
+export async function deleteSupplier(id) {
+  await delay(100);
+  return { id };
+}
+
+// ---------- Transactions (frontend demo state) ----------
+export async function getPurchases() {
+  await delay(150);
+  return demoPurchases();
+}
+
+export async function getPurchaseById(id) {
+  await delay(100);
+  return demoPurchases().find((p) => p.id === id) || null;
+}
+
+export async function createPurchase(data) {
+  await delay(150);
+  return { ...data, id: `pur-${Date.now()}` };
+}
+
+export async function getSales() {
+  await delay(150);
+  return demoSales();
+}
+
+export async function getSaleById(id) {
+  await delay(100);
+  return demoSales().find((s) => s.id === id) || null;
+}
+
+export async function createSale(data) {
+  await delay(150);
+  return { ...data, id: `sal-${Date.now()}` };
 }

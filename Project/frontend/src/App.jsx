@@ -4,6 +4,9 @@ import Dashboard from "./pages/Dashboard";
 import Medicines from "./pages/Medicines";
 import MedicineDetails from "./pages/MedicineDetails";
 import Batches from "./pages/Batches";
+import Suppliers from "./pages/Suppliers";
+import Purchases from "./pages/Purchases";
+import Sales from "./pages/Sales";
 import NotFound from "./pages/NotFound";
 
 export default function App() {
@@ -19,6 +22,15 @@ export default function App() {
       </Route>
       <Route path="/batches" element={<AppLayout />}>
         <Route index element={<Batches />} />
+      </Route>
+      <Route path="/suppliers" element={<AppLayout />}>
+        <Route index element={<Suppliers />} />
+      </Route>
+      <Route path="/purchases" element={<AppLayout />}>
+        <Route index element={<Purchases />} />
+      </Route>
+      <Route path="/sales" element={<AppLayout />}>
+        <Route index element={<Sales />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
