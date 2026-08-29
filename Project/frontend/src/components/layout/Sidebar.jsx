@@ -19,8 +19,8 @@ const NAV = [
   {
     group: "Inventory",
     items: [
-      { to: "/medicines", label: "Medicines", icon: Pill, key: "medicines", soon: true },
-      { to: "/batches", label: "Batches", icon: Layers, key: "batches", soon: true },
+      { to: "/medicines", label: "Medicines", icon: Pill, key: "medicines" },
+      { to: "/batches", label: "Batches", icon: Layers, key: "batches" },
       { to: "/low-stock", label: "Low Stock", icon: Layers, key: "low-stock", soon: true },
       { to: "/expiry", label: "Expiry", icon: Layers, key: "expiry", soon: true },
     ],

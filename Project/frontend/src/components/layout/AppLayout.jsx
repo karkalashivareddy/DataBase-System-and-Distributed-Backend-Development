@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
+import ToastStack from "../common/Toast";
 import { useSettings } from "../../contexts/SettingsContext";
 
 export default function AppLayout() {
@@ -27,6 +28,7 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
+      <ToastStack />
     </div>
   );
 }

@@ -3,6 +3,8 @@
 // be swapped to a fetch() call against the Express backend later without
 // touching the UI components. These are NOT real backend API calls.
 import { users as demoUsers, demoCredentials } from "../data/users";
+import { medicines as demoMedicines } from "../data/medicines";
+import { batches as demoBatches } from "../data/batches";
 import {
   getKpis,
   getSalesTrend,
@@ -79,4 +81,51 @@ export async function getDashboardData() {
 export async function getNotifications() {
   await delay(120);
   return dataGetNotifications();
+}
+
+// ---------- Medicines (frontend demo state; swap for backend fetch later) ----------
+export async function getMedicines() {
+  await delay(150);
+  return demoMedicines;
+}
+
+export async function getMedicineById(id) {
+  await delay(100);
+  return demoMedicines.find((m) => m.id === id) || null;
+}
+
+export async function createMedicine(data) {
+  await delay(150);
+  return { ...data, id: `med-${Date.now()}` };
+}
+
+export async function updateMedicine(id, data) {
+  await delay(150);
+  return { id, ...data };
+}
+
+export async function deleteMedicine(id) {
+  await delay(100);
+  return { id };
+}
+
+// ---------- Batches (frontend demo state) ----------
+export async function getBatches() {
+  await delay(150);
+  return demoBatches();
+}
+
+export async function getBatchById(id) {
+  await delay(100);
+  return demoBatches().find((b) => b.id === id) || null;
+}
+
+export async function getBatchesByMedicine(medicineId) {
+  await delay(100);
+  return (demoBatches() || []).filter((b) => b.medicineId === medicineId);
+}
+
+export async function createBatch(data) {
+  await delay(150);
+  return { ...data, id: `bat-${Date.now()}` };
 }
