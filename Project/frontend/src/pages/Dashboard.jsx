@@ -136,7 +136,7 @@ export default function Dashboard() {
               <div className="card-title">Low Stock Alerts</div>
               <div className="card-sub">Items under reorder level</div>
             </div>
-            <Link to="/alerts" className="btn btn-ghost btn-sm">View all <ArrowRight size={14} /></Link>
+            <Link to="/low-stock" className="btn btn-ghost btn-sm">View all <ArrowRight size={14} /></Link>
           </div>
           {lowStockList.length === 0 ? (
             <div className="muted text-sm">All medicines are sufficiently stocked.</div>

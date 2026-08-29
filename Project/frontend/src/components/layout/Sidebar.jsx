@@ -1,8 +1,10 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Pill,
   Layers,
+  AlertTriangle,
+  CalendarClock,
   Truck,
   ShoppingCart,
   ShoppingBag,
@@ -13,6 +15,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
+import { useToast } from "../../contexts/ToastContext";
 
 const NAV = [
   { group: "Overview", items: [{ to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, key: "dashboard" }] },
@@ -21,8 +24,8 @@ const NAV = [
     items: [
       { to: "/medicines", label: "Medicines", icon: Pill, key: "medicines" },
       { to: "/batches", label: "Batches", icon: Layers, key: "batches" },
-      { to: "/low-stock", label: "Low Stock", icon: Layers, key: "low-stock", soon: true },
-      { to: "/expiry", label: "Expiry", icon: Layers, key: "expiry", soon: true },
+      { to: "/low-stock", label: "Low Stock", icon: AlertTriangle, key: "low-stock" },
+      { to: "/expiry", label: "Expiry", icon: CalendarClock, key: "expiry" },
     ],
   },
   {
@@ -36,22 +39,30 @@ const NAV = [
   {
     group: "Insights",
     items: [
-      { to: "/analytics", label: "Analytics", icon: BarChart3, key: "analytics", soon: true },
-      { to: "/reports", label: "Reports", icon: FileText, key: "reports", soon: true },
+      { to: "/analytics", label: "Analytics", icon: BarChart3, key: "analytics" },
+      { to: "/reports", label: "Reports", icon: FileText, key: "reports" },
     ],
   },
   {
     group: "Administration",
     items: [
-      { to: "/users", label: "Users", icon: Users, key: "users", soon: true },
-      { to: "/settings", label: "Settings", icon: Settings, key: "settings", soon: true },
+      { to: "/users", label: "Users", icon: Users, key: "users" },
+      { to: "/settings", label: "Settings", icon: Settings, key: "settings" },
     ],
   },
 ];
 
 export default function Sidebar({ collapsed, open, onCloseMobile }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const toast = useToast();
   const role = user?.role || "Administrator";
+
+  const handleLogout = () => {
+    logout();
+    toast.info("Logged out", "You have been signed out.");
+    navigate("/login");
+  };
 
   return (
     <>
@@ -74,25 +85,18 @@ export default function Sidebar({ collapsed, open, onCloseMobile }) {
           {NAV.map((group) => (
             <div key={group.group}>
               <div className="nav-group-label">{group.group}</div>
-              {group.items.map((item) =>
-                item.soon ? (
-                  <div className="nav-link disabled" key={item.to} title={collapsed ? item.label : undefined}>
-                    <item.icon className="nav-icon" size={18} />
-                    <span className="nav-label">{item.label}</span>
-                    <span className="nav-soon">Soon</span>
-                  </div>
-                ) : (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-                    onClick={onCloseMobile}
-                  >
-                    <item.icon className="nav-icon" size={18} />
-                    <span className="nav-label">{item.label}</span>
-                  </NavLink>
-                )
-              )}
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                  title={collapsed ? item.label : undefined}
+                >
+                  <item.icon className="nav-icon" size={18} />
+                  <span className="nav-label">{item.label}</span>
+                </NavLink>
+              ))}
             </div>
           ))}
         </nav>
@@ -104,7 +108,7 @@ export default function Sidebar({ collapsed, open, onCloseMobile }) {
               <span className="user-name">{user?.name || "Shiva Reddy"}</span>
               <span className="user-role">{role}</span>
             </div>
-            <button className="icon-btn" aria-label="Logout" title="Logout">
+            <button className="icon-btn" onClick={handleLogout} aria-label="Logout" title="Logout">
               <LogOut size={18} />
             </button>
           </div>

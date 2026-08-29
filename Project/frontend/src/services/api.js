@@ -187,3 +187,14 @@ export async function createSale(data) {
   await delay(150);
   return { ...data, id: `sal-${Date.now()}` };
 }
+
+// ---------- Users (frontend demo state) ----------
+export async function getUsers() {
+  await delay(150);
+  return demoUsers;
+}
+
+export async function getUserById(id) {
+  await delay(100);
+  return demoUsers.find((u) => u.id === id) || null;
+}
