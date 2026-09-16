@@ -47,9 +47,9 @@ export default function Analytics() {
 
   const maxTop = topSelling[0]?.value || 1;
 
-  const supplierPerformance = suppliers.map((s) => ({
+  const supplierPerformance = suppliers.map((s, i) => ({
     name: s.name,
-    active: s.status === "Active" ? 92 + Math.floor(Math.random() * 8) : 40,
+    active: s.status === "Active" ? Math.min(88 + (i % 3) * 4, 98) : 40,
   }));
 
   const expiryRisk = [

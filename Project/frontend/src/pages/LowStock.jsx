@@ -26,7 +26,7 @@ export default function LowStock() {
         const severity = ratio < 0.3 ? "Critical" : "Warning";
         return { ...m, shortage, suggested, severity };
       })
-      .sort((a, b) => a.ratioCheck - b.ratioCheck);
+      .sort((a, b) => a.stock - b.stock);
     if (query) {
       const q = query.toLowerCase();
       list = list.filter((m) => `${m.name} ${m.generic}`.toLowerCase().includes(q));
@@ -34,7 +34,7 @@ export default function LowStock() {
     return list;
   }, [query]);
 
-  // Can't sort by computed property via initial chain; re-sort by severity then shortage
+  // Re-sort by severity then shortage
   lowStock.sort((a, b) => {
     if (a.severity === b.severity) return b.shortage - a.shortage;
     return a.severity === "Critical" ? -1 : 1;

@@ -19,9 +19,17 @@ The **Medicine Stock Management & Analytics Portal for Pharmaceuticals** is a ce
 
 The system maintains structured data related to medicines, suppliers, batches, purchases, sales, and inventory levels to provide better visibility and consistency across inventory operations.
 
-The portal supports **batch-wise stock tracking**, **low-stock identification**, **near-expiry monitoring**, **role-based access**, and a **visual analytics dashboard** to support faster inventory decisions.
+The portal targets **batch-wise stock tracking**, **low-stock identification**, **near-expiry monitoring**, **role-based access**, and a **visual analytics dashboard** to support faster inventory decisions.
 
-## Key Capabilities
+## Current Implementation Status
+
+> **Milestone 1 (complete):** React/Vite frontend prototype with a full routed dashboard and a bundled demo-data layer. All screen interactions work against local fixtures; the service layer simulates latency so the UI can be evaluated without a backend.
+
+> **Milestone 2 (planned):** Express + Mongoose + MongoDB backend, REST APIs, JWT authentication, and frontend-backend integration. Not yet implemented.
+
+The target architecture for the completed system is described below; the code that exists today is limited to the frontend prototype.
+
+## Key Capabilities (frontend prototype)
 
 - Medicine management
 - Supplier management
@@ -29,57 +37,54 @@ The portal supports **batch-wise stock tracking**, **low-stock identification**,
 - Purchase and sales transaction recording
 - Low-stock identification
 - Near-expiry monitoring
-- Role-based access
+- Role-based access (design-time demo only)
 - Analytics dashboard using Recharts
 
-## System Architecture
+## Target System Architecture
 
 **Frontend:** React.js, HTML5, CSS3, JavaScript (ES6+)
 
-**Backend:** Node.js, Express.js
+**Backend (planned):** Node.js, Express.js
 
-**API Layer:** RESTful APIs
+**API Layer (planned):** RESTful APIs
 
-**Data Access:** Mongoose
+**Data Access (planned):** Mongoose
 
-**Database:** MongoDB
+**Database (planned):** MongoDB
 
-**Security:** JWT authentication and bcrypt password hashing
+**Security (planned):** JWT authentication and bcrypt password hashing
 
-### Data Flow
+### Target Data Flow
 
 User Action → React Interface → RESTful API → Node.js / Express.js → Validation & Authorization → Mongoose → MongoDB → Response → React UI
 
 ## Technology Stack
 
-### Frontend
+### Frontend (implemented)
 
 - React.js
 - HTML5
 - CSS3
 - JavaScript (ES6+)
+- Recharts
 
-### Backend
+### Backend (planned)
 
 - Node.js
 - Express.js
 
-### Database & ODM
+### Database & ODM (planned)
 
 - MongoDB
 - Mongoose
 
-### API & Security
+### API & Security (planned)
 
 - RESTful APIs
 - JWT
 - bcrypt
 
-### Analytics
-
-- Recharts
-
-### Development & Testing
+### Development & Testing Tools
 
 - Postman
 - MongoDB Compass
