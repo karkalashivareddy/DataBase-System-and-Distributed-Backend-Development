@@ -1,125 +1,119 @@
-﻿# Database Systems Engineering & Distributed Backend Development
+# Database Systems & Backend Development
 
-Academic repository for coursework and project work at **KL UNIVERSITY**.
+This repository collects database coursework and a portfolio-oriented application named **PharmaStock**. The repository is organized into two deliberately separate areas:
 
-## Repository Contents
+- `Practicals/` — database systems exercises and reports.
+- `Project/` — the PharmaStock medicine inventory interface, backend/domain models, and project documentation.
 
-- **Practicals/** — Existing practical coursework and implementations
-- **Project/** — Medicine Stock Management & Analytics Portal for Pharmaceuticals
+## PharmaStock
 
-## Repository Structure
+PharmaStock is a pharmaceutical inventory management interface covering medicines, batches, suppliers, purchases, sales, expiry monitoring, low-stock views, analytics, reports, users, and settings.
 
-``text
-DataBase-System-and-Distributed-Backend-Development/
-│
-├── README.md
-│
-├── Practicals/
-│   ├── Practical-01/
-│   ├── Practical-02/
-│   ├── Practical-03/
-│   └── ...
-│
-└── Project/
-    ├── README.md
-    │
-    └── docs/
-        ├── ABSTRACT.md
-        └── Medicine_Stock_Management_Review2_FINAL_MASTER.pptx
-``
+The current checkout contains two complementary implementations:
 
-## Project
+1. A React/Vite frontend with routed dashboard screens and bundled demo data. Its service layer intentionally simulates latency and returns local fixtures, so the UI can be evaluated without MongoDB.
+2. An Express/Mongoose backend with environment-based MongoDB configuration, User/Medicine/Batch/Supplier/Purchase/Sale models, seed utilities, JWT/bcrypt dependencies, and a currently wired `/api/health` endpoint. The full inventory CRUD surface is not mounted in `Project/backend/src/server.js` yet.
 
-### Medicine Stock Management & Analytics Portal for Pharmaceuticals
+That distinction is important: the repository demonstrates the UI/domain design and backend foundation, but it should not be described as a fully integrated production inventory API.
 
-A centralized pharmaceutical inventory management and analytics portal designed to improve medicine stock visibility, batch-wise tracking, transaction management, expiry monitoring, and inventory decision-making.
+## Architecture
 
-### Key Capabilities
+```mermaid
+flowchart LR
+    U[Browser] --> F[React + Vite frontend]
+    F --> D[Bundled demo data and service layer]
+    F -. future integration .-> A[Express API]
+    A --> M[(MongoDB via Mongoose)]
+    A --> H[GET /api/health]
+    S[Seed utility] --> M
+```
 
-- Medicine management
-- Supplier management
-- Batch-wise stock tracking
-- Purchase and sales transaction recording
-- Low-stock identification
-- Near-expiry monitoring
-- Role-based access
-- Analytics dashboard using Recharts
+## Technology stack
 
-## Technology Stack
+| Area | Technologies |
+| --- | --- |
+| Frontend | React 18, Vite, React Router, Recharts, Lucide React, CSS |
+| Backend | Node.js 18+, Express, dotenv, JWT, bcryptjs |
+| Persistence | MongoDB and Mongoose 8 |
+| Documentation | Markdown, database schema/design notes, coursework reports |
 
-### Frontend
+## Run the frontend demo
 
-- React.js
-- HTML5
-- CSS3
-- JavaScript (ES6+)
+```bash
+cd Project/frontend
+npm install
+npm run dev
+```
 
-### Backend
+Open the Vite URL printed in the terminal. Current routes include `/login`, `/dashboard`, `/medicines`, `/batches`, `/low-stock`, `/expiry`, `/suppliers`, `/purchases`, `/sales`, `/analytics`, `/reports`, `/users`, `/profile`, and `/settings`.
 
-- Node.js
-- Express.js
+The frontend login and inventory mutations use local demo data. They do not call the Express server in the current implementation.
 
-### Database & ODM
+## Run the backend foundation
 
-- MongoDB
-- Mongoose
+Prerequisites: Node.js 18+ and a reachable MongoDB instance.
 
-### API & Security
+```bash
+cd Project/backend
+Copy-Item .env.example .env       # PowerShell
+# or: cp .env.example .env
 
-- RESTful APIs
-- JWT
-- bcrypt
+# Set MONGODB_URI and replace JWT_SECRET with a private value.
+npm install
+npm run start
+```
 
-### Analytics
+The default server port is `5000` and the health endpoint is:
 
-- Recharts
+```text
+GET http://localhost:5000/api/health
+```
 
-### Development & Testing
+The response reports whether Mongoose is connected. The seed command is available for the model fixtures:
 
-- Postman
-- MongoDB Compass
-- Visual Studio Code
-- npm
-- Git
-- GitHub
+```bash
+npm run seed
+```
 
-## Project Team
+Do not commit `Project/backend/.env`; use the committed `.env.example` as the safe template.
 
-| Team Member | Roll No. |
-|---|---|
-| **KARKALA SHIVA REDDY** | **2520030105** |
-| **PARIPALLI NAVADEEP** | **2520030196** |
+## Data model
 
-### Project Guide
+The backend defines these Mongoose entities:
 
-**Dr. R. Sateesh Kumar**
+| Model | Role |
+| --- | --- |
+| `Medicine` | medicine master data and stock-facing attributes |
+| `Batch` | batch/expiry-level inventory information |
+| `Supplier` | supplier records |
+| `Purchase` | inbound stock transactions |
+| `Sale` | outbound stock transactions |
+| `User` | user identity and password-hashing hooks |
 
-### University
+Additional schema and setup notes live in [`Project/docs/`](Project/docs/).
 
-**KL UNIVERSITY**
+## Project structure
 
-## Project Documentation
+```text
+Practicals/             database exercises and reports
+Project/
+  frontend/             React/Vite dashboard and local demo data
+  backend/              Express/Mongoose server, models, seed, and config
+  docs/                  schema, design, setup, abstract, and review material
+```
 
-- [Project README](Project/README.md)
-- [Abstract](Project/docs/ABSTRACT.md)
-- [Project Review-2 Presentation](Project/docs/Medicine_Stock_Management_Review2_FINAL_MASTER.pptx)
+## Verification and current limits
 
-## Academic Context
+```bash
+cd Project/frontend
+npm run build
 
-**Project Title:** Medicine Stock Management & Analytics Portal for Pharmaceuticals
+cd ../backend
+node --check src/server.js
+```
 
-**Domain:** Database Systems Engineering & Distributed Backend Development
+There is no automated test suite or CI workflow in the current repository. The next integration step would be to connect frontend services to versioned backend routes, add request validation and API tests, and define transaction boundaries for stock changes.
 
-**Review:** Project Review – 2
+## Author
 
-**University:** KL UNIVERSITY
-
-**Project Guide:** Dr. R. Sateesh Kumar
-
-## Repository Organization
-
-The repository separates existing practical coursework from project documentation.
-
-- Practicals/ contains the existing practical coursework and is preserved without modification.
-- Project/ contains the pharmaceutical inventory management project.
-- Project/docs/ contains the project abstract and Review-2 presentation.
+**Karkala Shiva Reddy** — [GitHub](https://github.com/karkalashivareddy)
