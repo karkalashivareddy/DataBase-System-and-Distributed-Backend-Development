@@ -75,17 +75,6 @@ npm run build
 
 There is no automated test suite or CI workflow yet. The next integration step is to build the Express/Mongoose backend, wire the frontend service layer to real API routes, add request validation and API tests, and define transaction boundaries for stock changes.
 
-## Screenshots
-
-| View | Screenshot |
-| --- | --- |
-| Login (demo credentials) | ![Login](docs/assets/screenshots/01-login.png) |
-| Dashboard | ![Dashboard](docs/assets/screenshots/02-dashboard.png) |
-| Medicines | ![Medicines](docs/assets/screenshots/03-medicines.png) |
-| Analytics | ![Analytics](docs/assets/screenshots/04-analytics.png) |
-| Batches | ![Batches](docs/assets/screenshots/05-batches.png) |
-| Low Stock | ![Low Stock](docs/assets/screenshots/06-low-stock.png) |
-
 *Screenshots captured from live frontend demo (Vite dev server, all data from local demo fixtures — no backend connected) on 2026-09-17.*
 
 ## Author
