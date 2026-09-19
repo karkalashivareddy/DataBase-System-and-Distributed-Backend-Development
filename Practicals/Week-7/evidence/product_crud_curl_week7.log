@@ -1,0 +1,36 @@
+﻿### GET /api/products (empty database)
+[{"description":"Mechanical keyboard","id":1,"name":"Keyboard","price":2500.0,"quantity":20},{"description":"Hp Gaming","id":4,"name":"Laptop","price":55000.0,"quantity":1}]
+
+### POST #1
+{"description":"Dell Inspiron 15","id":5,"name":"Laptop","price":54999.5,"quantity":25}
+
+### POST #2
+{"description":"Logitech M185","id":6,"name":"Wireless Mouse","price":999.0,"quantity":120}
+
+### POST #3
+{"description":"Keychron K2","id":7,"name":"Mechanical Keyboard","price":7999.0,"quantity":40}
+
+### GET /api/products (all)
+[{"description":"Mechanical keyboard","id":1,"name":"Keyboard","price":2500.0,"quantity":20},{"description":"Hp Gaming","id":4,"name":"Laptop","price":55000.0,"quantity":1},{"description":"Dell Inspiron 15","id":5,"name":"Laptop","price":54999.5,"quantity":25},{"description":"Logitech M185","id":6,"name":"Wireless Mouse","price":999.0,"quantity":120},{"description":"Keychron K2","id":7,"name":"Mechanical Keyboard","price":7999.0,"quantity":40}]
+
+### GET /api/products/1 (one)
+{"description":"Mechanical keyboard","id":1,"name":"Keyboard","price":2500.0,"quantity":20}
+
+### PUT /api/products/1 (update)
+{"description":"Dell Inspiron 15 - 16GB","id":1,"name":"Laptop","price":57999.0,"quantity":20}
+
+### DELETE /api/products/2
+
+### GET /api/products (after update+delete)
+[{"description":"Dell Inspiron 15 - 16GB","id":1,"name":"Laptop","price":57999.0,"quantity":20},{"description":"Hp Gaming","id":4,"name":"Laptop","price":55000.0,"quantity":1},{"description":"Dell Inspiron 15","id":5,"name":"Laptop","price":54999.5,"quantity":25},{"description":"Logitech M185","id":6,"name":"Wireless Mouse","price":999.0,"quantity":120},{"description":"Keychron K2","id":7,"name":"Mechanical Keyboard","price":7999.0,"quantity":40}]
+
+### DELETE /api/products/7 (created in this session)
+
+### GET /api/products (final)
+[{"description":"Dell Inspiron 15 - 16GB","id":1,"name":"Laptop","price":57999.0,"quantity":20},{"description":"Hp Gaming","id":4,"name":"Laptop","price":55000.0,"quantity":1},{"description":"Dell Inspiron 15","id":5,"name":"Laptop","price":54999.5,"quantity":25},{"description":"Logitech M185","id":6,"name":"Wireless Mouse","price":999.0,"quantity":120}]
+# MySQL verification (kluh.products persisted rows)
+id	name	description	price	quantity
+1	Laptop	Dell Inspiron 15 - 16GB	57999	20
+4	Laptop	Hp Gaming	55000	1
+5	Laptop	Dell Inspiron 15	54999.5	25
+6	Wireless Mouse	Logitech M185	999	120
