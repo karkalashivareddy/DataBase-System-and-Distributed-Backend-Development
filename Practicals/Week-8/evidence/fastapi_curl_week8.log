@@ -1,0 +1,40 @@
+﻿### GET /
+{"message":"Welcome to Student Management API"}
+
+### GET /docs (Swagger UI - HTTP status)
+HTTP 200
+
+### POST /students?student_id=101
+{"message":"Student created successfully","student_id":101,"student":{"name":"Rahul","age":20,"course":"Computer Science","email":"rahul@example.com"}}
+
+### POST again (duplicate -> HTTP 400)
+HTTP 400
+
+### GET /students
+{"students":{"101":{"name":"Rahul","age":20,"course":"Computer Science","email":"rahul@example.com"}}}
+
+### GET /students/101
+{"name":"Rahul","age":20,"course":"Computer Science","email":"rahul@example.com"}
+
+### PUT /students/101
+{"message":"Student completely updated","student_id":101,"student":{"name":"Rahul Kumar","age":21,"course":"Artificial Intelligence","email":"rahulkumar@example.com"}}
+
+### PATCH /students/101 (only course)
+{"message":"Student partially updated","student_id":101,"student":{"name":"Rahul Kumar","age":21,"course":"Data Science","email":"rahulkumar@example.com"}}
+
+### GET /students/999 (missing -> HTTP 404 detail)
+HTTP 404 
+{"detail":"Student not found"}
+
+### POST invalid age -> HTTP 422
+HTTP 422
+
+### POST invalid email -> HTTP 422
+HTTP 422
+
+### DELETE /students/101
+{"message":"Student deleted successfully","student_id":101,"student":{"name":"Rahul Kumar","age":21,"course":"Data Science","email":"rahulkumar@example.com"}}
+
+### GET /students/101 after delete (HTTP 404)
+HTTP 404 
+{"detail":"Student not found"}
