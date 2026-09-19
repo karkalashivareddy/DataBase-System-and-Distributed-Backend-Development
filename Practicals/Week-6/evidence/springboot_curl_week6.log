@@ -1,0 +1,35 @@
+﻿### GET /home (Thymeleaf MVC view)
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Spring Boot MVC</title>
+</head>
+<body>
+    <h1>Welcome, <span>Alice</span>!</h1>
+    <p>Your age is: <span>25</span></p>
+</body>
+</html>
+
+### GET /actuator/health
+{"groups":["liveness","readiness"],"status":"UP"}
+
+### GET /students (empty)
+[]
+
+### POST /students
+{"id":1,"name":"Shiva","department":"CSE","email":"shiva@klu.edu.in"}
+
+### GET /students/1
+{"id":1,"name":"Shiva","department":"CSE","email":"shiva@klu.edu.in"}
+
+### PUT /students/1
+{"id":1,"name":"Shiva Reddy","department":"CSE-Cyber","email":"shiva.reddy@klu.edu.in"}
+
+### GET /students (after update)
+[{"id":1,"name":"Shiva Reddy","department":"CSE-Cyber","email":"shiva.reddy@klu.edu.in"}]
+
+### DELETE /students/1
+Deleted Successfully
+
+### GET /students (after delete)
+[]
