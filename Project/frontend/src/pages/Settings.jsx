@@ -7,8 +7,6 @@ import { THEMES, CURRENCIES, DATE_FORMATS, ITEMS_PER_PAGE_OPTIONS } from "../uti
 export default function Settings() {
   const { settings, update, toggleTheme } = useSettings();
   const toast = useToast();
-  const notifKeys = Object.keys(settings.notifications);
-
   const toggleNotif = (key) => {
     update({ notifications: { ...settings.notifications, [key]: !settings.notifications[key] } });
     toast.success("Updated", "Notification preference saved.");

@@ -11,9 +11,12 @@ import Button from "../components/common/Button";
 import * as api from "../services/api";
 import { useToast } from "../contexts/ToastContext";
 import { formatINR } from "../utils/formatters";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function Purchases() {
   const toast = useToast();
+  const { user } = useAuth();
+  const canManage = ["Admin", "Inventory Manager", "Pharmacist"].includes(user?.role);
   const [items, setItems] = useState(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -22,7 +25,7 @@ export default function Purchases() {
   const [formOpen, setFormOpen] = useState(false);
 
   useEffect(() => {
-    api.getPurchases().then(setItems);
+    api.getPurchases().then(setItems).catch(() => setItems([]));
   }, []);
 
   const filtered = useMemo(() => {
@@ -45,12 +48,12 @@ export default function Purchases() {
 
   const submit = async (payload) => {
     try {
-      await api.createPurchase(payload);
-      setItems((prev) => [payload, ...prev]);
-      toast.success("Purchase recorded", `PO recorded for ${payload.medicine}.`);
+      const saved = await api.createPurchase(payload);
+      setItems((prev) => [saved, ...prev]);
+      toast.success("Purchase recorded", `PO ${saved.purchaseNo} recorded successfully.`);
       setFormOpen(false);
-    } catch {
-      toast.error("Error", "Could not record purchase.");
+    } catch (error) {
+      toast.error("Error", error.message || "Could not record purchase.");
     }
   };
 
@@ -61,7 +64,7 @@ export default function Purchases() {
       <PageHeader
         title="Purchases"
         subtitle="Record and track purchase orders from your suppliers."
-        actions={<Button icon={Plus} onClick={() => setFormOpen(true)}>Record Purchase</Button>}
+        actions={canManage ? <Button data-testid="purchase-create" icon={Plus} onClick={() => setFormOpen(true)}>Record Purchase</Button> : null}
       />
 
       <div className="filter-bar">
@@ -96,7 +99,7 @@ export default function Purchases() {
         </div>
       )}
 
-      <TransactionForm open={formOpen} onClose={() => setFormOpen(false)} onSubmit={submit} kind="purchase" />
+      {canManage && <TransactionForm open={formOpen} onClose={() => setFormOpen(false)} onSubmit={submit} kind="purchase" />}
     </div>
   );
 }

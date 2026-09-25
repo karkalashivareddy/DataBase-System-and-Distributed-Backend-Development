@@ -14,25 +14,15 @@ function batchStatus(expiry, qty) {
   return "Active";
 }
 
-const TREND = [
-  { month: "Mar", stock: 1250 },
-  { month: "Apr", stock: 1180 },
-  { month: "May", stock: 1310 },
-  { month: "Jun", stock: 1240 },
-  { month: "Jul", stock: 1170 },
-  { month: "Aug", stock: 1120 },
-];
-
 export default function MedicineDetails({ medicine }) {
   const [batches, setBatches] = useState([]);
 
   useEffect(() => {
     let mounted = true;
     getBatchesByMedicine(medicine.id).then((b) => {
-      if (mounted)
-        setBatches(
-          b.map((x) => ({ ...x, status: batchStatus(x.expiryDate, x.quantity) }))
-        );
+      if (mounted) setBatches(b.map((x) => ({ ...x, status: batchStatus(x.expiryDate, x.quantity) })));
+    }).catch(() => {
+      if (mounted) setBatches([]);
     });
     return () => { mounted = false; };
   }, [medicine.id]);
@@ -77,14 +67,14 @@ export default function MedicineDetails({ medicine }) {
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-header">
           <div>
-            <div className="card-title">Stock Trend</div>
-            <div className="card-sub">Units available over the last 6 months</div>
+            <div className="card-title">Current Stock Position</div>
+            <div className="card-sub">Available units across active batches</div>
           </div>
           <StatusBadge status={needsReorder ? "Low Stock" : "Healthy"} dot={false} />
         </div>
         <div className="chart-box chart-height-sm">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={TREND} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+            <LineChart data={[{ month: "Current", stock: medicine.stock }]} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis dataKey="month" stroke="var(--text-muted)" tickLine={false} axisLine={false} dy={8} />
               <YAxis stroke="var(--text-muted)" tickLine={false} axisLine={false} width={40} />
@@ -134,7 +124,7 @@ export default function MedicineDetails({ medicine }) {
                     <td className="muted">{formatDate(b.manufactureDate)}</td>
                     <td>{formatDate(b.expiryDate)}</td>
                     <td>{formatNumber(b.quantity)}</td>
-                    <td className="text-muted">{b.supplierId}</td>
+                    <td className="text-muted">{b.supplierName}</td>
                     <td><StatusBadge status={b.status} /></td>
                   </tr>
                 ))

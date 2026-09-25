@@ -12,11 +12,14 @@ import EmptyState from "../components/common/EmptyState";
 import Button from "../components/common/Button";
 import * as api from "../services/api";
 import { useToast } from "../contexts/ToastContext";
+import { useAuth } from "../contexts/AuthContext";
 import { MEDICINE_CATEGORIES } from "../utils/constants";
 
 export default function Medicines() {
   const toast = useToast();
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const canManage = ["Admin", "Inventory Manager", "Pharmacist"].includes(user?.role);
   const [items, setItems] = useState(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
@@ -31,7 +34,7 @@ export default function Medicines() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    api.getMedicines().then(setItems);
+    api.getMedicines().then(setItems).catch(() => setItems([]));
   }, []);
 
   const filtered = useMemo(() => {
@@ -76,18 +79,12 @@ export default function Medicines() {
 
   const submitForm = async (payload) => {
     try {
-      if (editing) {
-        await api.updateMedicine(editing.id, payload);
-        setItems((prev) => prev.map((m) => (m.id === editing.id ? { ...m, ...payload } : m)));
-        toast.success("Updated", "Medicine updated successfully.");
-      } else {
-        await api.createMedicine(payload);
-        setItems((prev) => [payload, ...prev]);
-        toast.success("Added", "Medicine added successfully.");
-      }
+      const saved = editing ? await api.updateMedicine(editing.id, payload) : await api.createMedicine(payload);
+      setItems((prev) => editing ? prev.map((item) => item.id === editing.id ? saved : item) : [saved, ...prev]);
+      toast.success(editing ? "Updated" : "Added", editing ? "Medicine updated successfully." : "Medicine added successfully.");
       setFormOpen(false);
-    } catch {
-      toast.error("Error", "Could not save medicine.");
+    } catch (error) {
+      toast.error("Error", error.message || "Could not save medicine.");
     }
   };
 
@@ -111,7 +108,7 @@ export default function Medicines() {
       <PageHeader
         title="Medicines"
         subtitle="Manage your pharmaceutical product catalogue and stock levels."
-        actions={<Button icon={Plus} onClick={openAdd}>Add Medicine</Button>}
+        actions={canManage ? <Button icon={Plus} onClick={openAdd}>Add Medicine</Button> : null}
       />
 
       <FilterControls
@@ -128,8 +125,8 @@ export default function Medicines() {
           <MedicineTable
             items={paginated}
             onView={(m) => navigate(`/medicines/${m.id}`)}
-            onEdit={openEdit}
-            onDelete={setDeleting}
+            onEdit={canManage ? openEdit : undefined}
+            onDelete={canManage ? setDeleting : undefined}
             onSort={handleSort}
             sortKey={sortKey}
             sortDir={sortDir}
@@ -147,7 +144,7 @@ export default function Medicines() {
         </div>
       )}
 
-      <MedicineForm open={formOpen} onClose={() => setFormOpen(false)} onSubmit={submitForm} initial={editing} />
+      {canManage && <MedicineForm open={formOpen} onClose={() => setFormOpen(false)} onSubmit={submitForm} initial={editing} />}
 
       <ConfirmDialog
         open={!!deleting}

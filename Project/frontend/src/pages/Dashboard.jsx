@@ -3,29 +3,30 @@ import { Link } from "react-router-dom";
 import { Pill, Boxes, AlertTriangle, CalendarClock, Wallet, TrendingUp, ArrowRight } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import * as api from "../services/api";
-import { formatINR, formatINRCompact, formatNumber } from "../utils/formatters";
 import StatCard from "../components/dashboard/StatCard";
 import SalesChart from "../components/dashboard/SalesChart";
 import StockOverview from "../components/dashboard/StockOverview";
 import ExpiryWidget from "../components/dashboard/ExpiryWidget";
 import InventoryHealth from "../components/dashboard/InventoryHealth";
 import LoadingState from "../components/common/LoadingState";
-import { medicines } from "../data/medicines";
-import { batches } from "../data/batches";
-import { daysUntil } from "../utils/formatters";
+import { formatINR, formatINRCompact, formatNumber } from "../utils/formatters";
 
 export default function Dashboard() {
   const { user } = useAuth();
   const [data, setData] = useState(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let mounted = true;
     api.getDashboardData().then((d) => {
       if (mounted) setData(d);
+    }).catch((requestError) => {
+      if (mounted) setError(requestError.message || "Could not load dashboard.");
     });
     return () => { mounted = false; };
   }, []);
 
+  if (error) return <div className="card muted">{error}</div>;
   if (!data) {
     return (
       <div style={{ paddingTop: 8 }}>
@@ -37,15 +38,8 @@ export default function Dashboard() {
   const k = data.kpis;
   const firstName = (user?.name || "User").split(" ")[0];
 
-  const lowStockList = medicines
-    .filter((m) => m.stock < m.reorderLevel)
-    .sort((a, b) => (a.stock / a.reorderLevel) - (b.stock / b.reorderLevel))
-    .slice(0, 5);
-
-  const expiring = batches()
-    .filter((b) => daysUntil(b.expiryDate) >= 0 && daysUntil(b.expiryDate) <= 30)
-    .sort((a, b) => daysUntil(a.expiryDate) - daysUntil(b.expiryDate))
-    .slice(0, 5);
+  const lowStockList = (data.lowStockAlerts || []).slice(0, 5);
+  const expiring = (data.expiringSoon || []).slice(0, 5);
 
   return (
     <div>
@@ -72,7 +66,7 @@ export default function Dashboard() {
           <div className="card-header">
             <div>
               <div className="card-title">Sales Trend</div>
-              <div className="card-sub">Monthly revenue through Aug</div>
+              <div className="card-sub">Monthly completed sales</div>
             </div>
           </div>
           <SalesChart data={data.salesTrend} />
@@ -189,7 +183,7 @@ export default function Dashboard() {
                 </thead>
                 <tbody>
                   {expiring.map((b) => {
-                    const d = daysUntil(b.expiryDate);
+                    const d = b.days;
                     return (
                       <tr key={b.id}>
                         <td className="cell-primary">{b.batchNo}</td>

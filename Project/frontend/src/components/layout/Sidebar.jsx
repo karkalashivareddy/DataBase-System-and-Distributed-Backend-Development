@@ -46,7 +46,7 @@ const NAV = [
   {
     group: "Administration",
     items: [
-      { to: "/users", label: "Users", icon: Users, key: "users" },
+      { to: "/users", label: "Users", icon: Users, key: "users", roles: ["Admin"] },
       { to: "/settings", label: "Settings", icon: Settings, key: "settings" },
     ],
   },
@@ -85,7 +85,7 @@ export default function Sidebar({ collapsed, open, onCloseMobile }) {
           {NAV.map((group) => (
             <div key={group.group}>
               <div className="nav-group-label">{group.group}</div>
-              {group.items.map((item) => (
+              {group.items.filter((item) => !item.roles || item.roles.includes(user?.role)).map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}

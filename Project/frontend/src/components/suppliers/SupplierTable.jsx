@@ -34,8 +34,8 @@ export default function SupplierTable({ items, onView, onEdit, onDelete }) {
               <td>
                 <div className="row-actions" style={{ justifyContent: "flex-end" }}>
                   <button className="icon-btn accent" onClick={() => onView?.(s)} aria-label={`View ${s.name}`} title="View"><Eye size={16} /></button>
-                  <button className="icon-btn" onClick={() => onEdit?.(s)} aria-label={`Edit ${s.name}`} title="Edit"><Pencil size={16} /></button>
-                  <button className="icon-btn danger" onClick={() => onDelete?.(s)} aria-label={`Delete ${s.name}`} title="Delete"><Trash2 size={16} /></button>
+                  {onEdit && <button className="icon-btn" onClick={() => onEdit(s)} aria-label={`Edit ${s.name}`} title="Edit"><Pencil size={16} /></button>}
+                  {onDelete && <button className="icon-btn danger" onClick={() => onDelete(s)} aria-label={`Delete ${s.name}`} title="Delete"><Trash2 size={16} /></button>}
                 </div>
               </td>
             </tr>

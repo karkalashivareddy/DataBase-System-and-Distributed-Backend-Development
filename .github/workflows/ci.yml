@@ -1,0 +1,63 @@
+name: PharmaStock CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Project/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+          cache: npm
+          cache-dependency-path: Project/backend/package-lock.json
+      - run: npm ci
+      - name: Start MongoDB replica set
+        run: |
+          docker run --name pharmastock-mongo -d -p 27017:27017 mongo:7.0 mongod --replSet rs0 --bind_ip_all
+          until docker exec pharmastock-mongo mongosh --quiet --eval "db.adminCommand({ ping: 1 }).ok" | grep 1; do sleep 2; done
+          docker exec pharmastock-mongo mongosh --quiet --eval "rs.initiate({_id:'rs0',members:[{_id:0,host:'127.0.0.1:27017'}]})"
+          until [ "$(docker exec pharmastock-mongo mongosh --quiet --eval 'db.hello().isWritablePrimary')" = "true" ]; do sleep 2; done
+      - name: Seed CI database
+        env:
+          MONGODB_URI: mongodb://127.0.0.1:27017/pharmastock_ci?replicaSet=rs0
+          JWT_SECRET: ci-only-secret-with-at-least-32-characters
+          SEED_CONFIRM: RESET
+          SEED_PASSWORD: CI-Only-Password-2026!
+        run: npm run seed -- --force
+      - name: Verify CI database
+        env:
+          MONGODB_URI: mongodb://127.0.0.1:27017/pharmastock_ci?replicaSet=rs0
+          JWT_SECRET: ci-only-secret-with-at-least-32-characters
+          VERIFY_SEED_COUNTS: "true"
+        run: npm run verify-db
+      - name: Run backend tests
+        env:
+          MONGODB_URI: mongodb://127.0.0.1:27017/pharmastock_ci?replicaSet=rs0
+          JWT_SECRET: ci-only-secret-with-at-least-32-characters
+          SEED_PASSWORD: CI-Only-Password-2026!
+          RUN_TRANSACTION_TESTS: "true"
+        run: npm test
+      - run: npm audit --audit-level=high
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Project/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+          cache: npm
+          cache-dependency-path: Project/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm audit --audit-level=high

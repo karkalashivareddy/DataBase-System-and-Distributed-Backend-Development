@@ -1,8 +1,8 @@
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 
-export default function AnalyticsCard({ label, value, delta, trend = "up", sub }) {
+export default function AnalyticsCard({ label, value, delta, trend = "up", sub, testId }) {
   return (
-    <div className="card card-hover">
+    <div data-testid={testId} className="card card-hover">
       <div className="card-sub">{label}</div>
       <div style={{ fontSize: 24, fontWeight: 800, fontFamily: "var(--font-display)", margin: "6px 0 4px" }}>{value}</div>
       <div className="flex gap-8">

@@ -52,11 +52,3 @@ export const users = [
 ];
 
 export const currentUser = users[0];
-
-// Demo credentials for the login screen. This is a frontend-only demo and
-// must never be treated as real security.
-export const demoCredentials = {
-  email: "admin@pharmastock.in",
-  password: "pharma123",
-  user: currentUser,
-};

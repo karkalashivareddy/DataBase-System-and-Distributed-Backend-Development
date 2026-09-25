@@ -4,7 +4,6 @@ import { Eye, EyeOff, Lock, Mail, Pill, ShieldCheck, BarChart3, PackageCheck } f
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { email, required, minLen, validate } from "../utils/validators";
-import { demoCredentials } from "../data/users";
 import FloatingShapes from "../components/three/FloatingShapes";
 import ParticleBackground from "../components/three/ParticleBackground";
 import GlassOrb from "../components/three/GlassOrb";
@@ -28,7 +27,7 @@ export default function Login() {
     const errs = validate(
       {
         email: [required, email],
-        password: [required, minLen(6)],
+        password: [required, minLen(8)],
       },
       form
     );
@@ -45,11 +44,6 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillDemo = () => {
-    setForm({ email: demoCredentials.email, password: demoCredentials.password });
-    setErrors({});
   };
 
   return (
@@ -107,6 +101,7 @@ export default function Login() {
                 <span className="search-icon"><Mail size={16} /></span>
                 <input
                   id="email"
+                  data-testid="login-email"
                   className={`form-input ${errors.email ? "error" : ""}`}
                   style={{ paddingLeft: 38 }}
                   type="email"
@@ -124,6 +119,7 @@ export default function Login() {
               <div style={{ position: "relative" }}>
                 <input
                   id="password"
+                  data-testid="login-password"
                   className={`form-input ${errors.password ? "error" : ""}`}
                   type={showPass ? "text" : "password"}
                   placeholder="••••••••"
@@ -149,22 +145,18 @@ export default function Login() {
               <label className="check-row">
                 <input type="checkbox" /> Remember me
               </label>
-              <a href="#" onClick={(e) => { e.preventDefault(); toast.info("Reset", "Password reset link sent (demo)."); }}>Forgot password?</a>
+              <a href="mailto:admin@pharmastock.in">Contact administrator</a>
             </div>
 
-            <button className="btn btn-primary btn-lg btn-block" type="submit" disabled={loading}>
+            <button data-testid="login-submit" className="btn btn-primary btn-lg btn-block" type="submit" disabled={loading}>
               {loading ? "Signing in..." : "Sign In"}
             </button>
           </form>
 
           <div className="divider" />
 
-          <button className="btn btn-ghost btn-block" onClick={fillDemo}>
-            <Pill size={16} /> Use Demo Login
-          </button>
-
           <p className="muted text-sm" style={{ textAlign: "center", marginTop: 22 }}>
-            Demo credentials: <strong>admin@pharmastock.in</strong> / <strong>pharma123</strong>
+            Contact your administrator if you need access.
           </p>
           <p className="muted text-sm" style={{ textAlign: "center", marginTop: 8 }}>
             KL UNIVERSITY · Database Systems &amp; Distributed Backend Development

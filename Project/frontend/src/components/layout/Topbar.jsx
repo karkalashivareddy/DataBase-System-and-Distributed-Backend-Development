@@ -15,11 +15,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
-import { getNotifications } from "../../data/dashboard";
-import { medicines, suppliers } from "../../data/medicines";
-import { batches } from "../../data/batches";
-import { sales, purchases } from "../../data/transactions";
 import { useDebounce } from "../../hooks";
+import * as api from "../../services/api";
 
 function useClickOutside(ref, handler) {
   useEffect(() => {
@@ -65,6 +62,8 @@ export default function Topbar({ onToggleSidebar }) {
   const [userMenu, setUserMenu] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [notifs, setNotifs] = useState([]);
+  const [searchResults, setSearchResults] = useState(null);
   const debounced = useDebounce(query, 250);
 
   const notifRef = useRef(null);
@@ -74,35 +73,34 @@ export default function Topbar({ onToggleSidebar }) {
   useClickOutside(userRef, () => setUserMenu(false));
   useClickOutside(searchRef, () => setSearchOpen(false));
 
-  const notifs = getNotifications();
   const current = TITLES[location.pathname] || "PharmaStock";
 
-  // Global search grouped results
-  const q = debounced.trim().toLowerCase();
-  const searchResults = q
-    ? {
-        medicines: medicines.filter((m) =>
-          `${m.name} ${m.generic} ${m.category} ${m.manufacturer}`.toLowerCase().includes(q)
-        ).slice(0, 4),
-        suppliers: suppliers.filter((s) =>
-          `${s.name} ${s.contact}`.toLowerCase().includes(q)
-        ).slice(0, 3),
-        batches: batches().filter((b) =>
-          `${b.batchNo} ${b.medicineName}`.toLowerCase().includes(q)
-        ).slice(0, 3),
-        transactions: [
-          ...sales().map((s) => ({ id: s.id, label: s.saleNo, sub: s.medicine, kind: "Sale" })),
-          ...purchases().map((p) => ({ id: p.id, label: p.purchaseNo, sub: p.medicine, kind: "Purchase" })),
-        ].filter((t) => `${t.label} ${t.sub} ${t.kind}`.toLowerCase().includes(q)).slice(0, 3),
-      }
-    : null;
+  useEffect(() => {
+    let mounted = true;
+    api.getNotifications({ limit: 10 }).then((rows) => {
+      if (mounted) setNotifs(rows);
+    }).catch(() => {
+      if (mounted) setNotifs([]);
+    });
+    return () => { mounted = false; };
+  }, []);
 
-  const hasResults =
-    searchResults &&
-    (searchResults.medicines.length ||
-      searchResults.suppliers.length ||
-      searchResults.batches.length ||
-      searchResults.transactions.length);
+  useEffect(() => {
+    const q = debounced.trim();
+    if (!q) {
+      setSearchResults(null);
+      return undefined;
+    }
+    let mounted = true;
+    api.search(q).then((results) => {
+      if (mounted) setSearchResults(results);
+    }).catch(() => {
+      if (mounted) setSearchResults({ medicines: [], suppliers: [], batches: [], transactions: [] });
+    });
+    return () => { mounted = false; };
+  }, [debounced]);
+
+  const hasResults = searchResults && (searchResults.medicines.length || searchResults.suppliers.length || searchResults.batches.length || searchResults.transactions.length);
 
   const goTo = (kind, id) => {
     setSearchOpen(false);
@@ -110,7 +108,7 @@ export default function Topbar({ onToggleSidebar }) {
     if (kind === "medicine") navigate(`/medicines/${id}`);
     else if (kind === "supplier") navigate(`/suppliers?id=${id}`);
     else if (kind === "batch") navigate(`/batches?id=${id}`);
-    else navigate("/dashboard");
+    else navigate("/sales");
   };
 
   const handleLogout = () => {
@@ -249,7 +247,7 @@ export default function Topbar({ onToggleSidebar }) {
 
       {/* User */}
       <div style={{ position: "relative" }} ref={userRef}>
-        <button className="topbar-user" onClick={() => setUserMenu((v) => !v)} aria-label="Account menu">
+        <button data-testid="account-menu" className="topbar-user" onClick={() => setUserMenu((v) => !v)} aria-label="Account menu">
           <div className="topbar-user-meta">
             <span style={{ fontWeight: 600, fontSize: 13 }}>{user?.name || "Guest"}</span>
             <span className="muted text-sm">{user?.role || "—"}</span>
@@ -265,7 +263,7 @@ export default function Topbar({ onToggleSidebar }) {
               <Settings size={16} /> Settings
             </button>
             <div className="divider" style={{ margin: "4px 10px" }} />
-            <button className="menu-item danger" onClick={handleLogout}>
+            <button data-testid="logout" className="menu-item danger" onClick={handleLogout}>
               <LogOut size={16} /> Logout
             </button>
           </div>

@@ -12,11 +12,14 @@ import EmptyState from "../components/common/EmptyState";
 import Button from "../components/common/Button";
 import * as api from "../services/api";
 import { useToast } from "../contexts/ToastContext";
+import { useAuth } from "../contexts/AuthContext";
 
 const STATUS_OPTIONS = ["All", "Active", "Near Expiry", "Expired", "Depleted"];
 
 export default function Batches() {
   const toast = useToast();
+  const { user } = useAuth();
+  const canManage = ["Admin", "Inventory Manager", "Pharmacist"].includes(user?.role);
   const [items, setItems] = useState(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -33,7 +36,7 @@ export default function Batches() {
       const id = params.get("id");
       if (id) setSelected(data.find((b) => b.id === id) || null);
       if (id) setParams({}, { replace: true });
-    });
+    }).catch(() => setItems([]));
   }, []);
 
   const filtered = useMemo(() => {
@@ -54,17 +57,12 @@ export default function Batches() {
   const submitBatch = async (payload) => {
     setBusy(true);
     try {
-      await api.createBatch(payload);
-      const newBatch = {
-        ...payload,
-        id: `bat-${Date.now()}`,
-        status: new Date(payload.expiryDate) < new Date() ? "Expired" : "Active",
-      };
-      setItems((prev) => [newBatch, ...prev]);
+      const saved = await api.createBatch(payload);
+      setItems((prev) => [saved, ...prev]);
       setFormOpen(false);
       toast.success("Added", "Batch added successfully.");
-    } catch {
-      toast.error("Error", "Could not save batch.");
+    } catch (error) {
+      toast.error("Error", error.message || "Could not save batch.");
     }
     setBusy(false);
   };
@@ -76,7 +74,7 @@ export default function Batches() {
       <PageHeader
         title="Batches"
         subtitle="Batch-wise inventory with serial, expiry, and lot tracking."
-        actions={<Button icon={Plus} onClick={() => setFormOpen(true)}>Add Batch</Button>}
+        actions={canManage ? <Button icon={Plus} onClick={() => setFormOpen(true)}>Add Batch</Button> : null}
       />
 
       <div className="filter-bar">
@@ -105,7 +103,7 @@ export default function Batches() {
       )}
 
       <BatchDetails batch={selected} onClose={() => setSelected(null)} />
-      <BatchForm open={formOpen} onClose={() => setFormOpen(false)} onSubmit={submitBatch} existing={items} busy={busy} />
+      {canManage && <BatchForm open={formOpen} onClose={() => setFormOpen(false)} onSubmit={submitBatch} existing={items} busy={busy} />}
     </div>
   );
 }

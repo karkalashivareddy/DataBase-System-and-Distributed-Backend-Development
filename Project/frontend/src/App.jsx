@@ -19,8 +19,15 @@ import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 function RequireAuth({ children }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return <div className="page-loading">Loading your workspace...</div>;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return children;
+}
+
+function RoleRoute({ roles, children }) {
+  const { user } = useAuth();
+  if (!roles.includes(user?.role)) return <Navigate to="/dashboard" replace />;
   return children;
 }
 
@@ -69,7 +76,7 @@ export default function App() {
         <Route index element={<Reports />} />
       </Route>
       <Route path="/users" element={<ProtectedLayout />}>
-        <Route index element={<Users />} />
+        <Route index element={<RoleRoute roles={["Admin"]}><Users /></RoleRoute>} />
       </Route>
       <Route path="/profile" element={<ProtectedLayout />}>
         <Route index element={<Profile />} />

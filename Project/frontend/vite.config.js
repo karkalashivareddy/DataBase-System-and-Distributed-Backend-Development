@@ -6,14 +6,18 @@ export default defineConfig({
   server: {
     port: 5173,
     open: false,
+    proxy: {
+      "/api": "http://localhost:5000",
+    },
   },
   build: {
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ["react", "react-dom", "react-router-dom"],
-          charts: ["recharts"],
+        manualChunks(id) {
+          if (id.includes("node_modules/recharts") || id.includes("node_modules/d3-")) return "charts";
+          if (id.includes("node_modules")) return "vendor";
+          return undefined;
         },
       },
     },

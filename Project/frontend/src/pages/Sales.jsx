@@ -11,9 +11,12 @@ import Button from "../components/common/Button";
 import * as api from "../services/api";
 import { useToast } from "../contexts/ToastContext";
 import { formatINR } from "../utils/formatters";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function Sales() {
   const toast = useToast();
+  const { user } = useAuth();
+  const canSell = ["Admin", "Inventory Manager", "Pharmacist", "Sales Staff"].includes(user?.role);
   const [items, setItems] = useState(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -22,7 +25,7 @@ export default function Sales() {
   const [formOpen, setFormOpen] = useState(false);
 
   useEffect(() => {
-    api.getSales().then(setItems);
+    api.getSales().then(setItems).catch(() => setItems([]));
   }, []);
 
   const filtered = useMemo(() => {
@@ -45,12 +48,12 @@ export default function Sales() {
 
   const submit = async (payload) => {
     try {
-      await api.createSale(payload);
-      setItems((prev) => [payload, ...prev]);
-      toast.success("Sale recorded", `Invoice created for ${payload.medicine}.`);
+      const saved = await api.createSale(payload);
+      setItems((prev) => [saved, ...prev]);
+      toast.success("Sale recorded", `Invoice ${saved.saleNo} created successfully.`);
       setFormOpen(false);
-    } catch {
-      toast.error("Error", "Could not record sale.");
+    } catch (error) {
+      toast.error("Error", error.message || "Could not record sale.");
     }
   };
 
@@ -61,7 +64,7 @@ export default function Sales() {
       <PageHeader
         title="Sales"
         subtitle="Record sales transactions and customer invoices."
-        actions={<Button icon={Plus} onClick={() => setFormOpen(true)}>Record Sale</Button>}
+        actions={canSell ? <Button data-testid="sale-create" icon={Plus} onClick={() => setFormOpen(true)}>Record Sale</Button> : null}
       />
 
       <div className="filter-bar">
@@ -95,7 +98,7 @@ export default function Sales() {
         </div>
       )}
 
-      <TransactionForm open={formOpen} onClose={() => setFormOpen(false)} onSubmit={submit} kind="sale" />
+      {canSell && <TransactionForm open={formOpen} onClose={() => setFormOpen(false)} onSubmit={submit} kind="sale" />}
     </div>
   );
 }

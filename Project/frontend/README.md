@@ -1,52 +1,54 @@
-# PharmaStock — Frontend
+# PharmaStock Frontend
 
-**PharmaStock** is the frontend for the **Medicine Stock Management & Analytics Portal for Pharmaceuticals**, an academic project for the **Database Systems Engineering & Distributed Backend Development** course at **KL UNIVERSITY** (Project Guide: Dr. R. Sateesh Kumar).
+React/Vite frontend for the Medicine Stock Management & Analytics Portal.
 
-## Overview
-
-This repository contains a React + Vite frontend for a pharmaceutical inventory management application. The project is developed in incremental milestones:
-
-- **Commit 1 (current)** — Foundation & design system: React/Vite setup, routing foundation, design tokens, global styles, reusable common components, utilities, and a polished landing shell.
-- **Next milestones** — Dashboard and navigation, medicine inventory & batches, suppliers & transactions, analytics & reports, alerts, authentication, and 3D polish.
-
-## Technology
+## Stack
 
 - React 18
 - Vite
-- JavaScript (ES6+)
 - React Router
-- CSS (custom design-token system)
-- Recharts (analytics — introduced with the dashboard milestone)
-- Lucide React (icons)
+- Recharts
+- Lucide React
+- Custom CSS design system
 
-## Development
+## Run
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173
+The development server proxies `/api` to `http://localhost:5000`. Set `VITE_API_URL` when the API is hosted at another origin.
 
-## Production Build
+## Production build
 
 ```bash
 npm run build
 npm run preview
 ```
 
-## Foundation Scope (Commit 1)
+## Data flow
 
-- React/Vite application entry (`main.jsx`, `App.jsx`)
-- Routing foundation (`/` landing shell, `*` NotFound fallback)
-- Design-token system (`styles/variables.css`)
-- Global styling and layout primitives
-- Reusable common components (Button, Modal, StatusBadge, EmptyState, LoadingState)
-- Utility helpers (formatters, validators) and a localStorage hook
-- Project documentation
+Application pages use `src/services/api.js`, which sends authenticated HTTP requests to the Express API. The UI does not import `src/data/` fixtures in production code. The remaining files under `src/data/` are retained only for historical/demo reference and must not be connected to application screens.
 
-## Accessible & Responsive
+Authentication is managed by `src/contexts/AuthContext.jsx`. It stores the JWT, validates it with `/api/auth/me` on startup, and clears invalid sessions. All business data is refreshed from the API after mutations.
 
-The design system is responsive and respects `prefers-reduced-motion`, with visible focus states and semantic HTML.
+## Main routes
 
-> This milestone is frontend-only. Authentication and backend behaviour are planned for later milestones and must never rely on insecure client-side checks.
+`/login`, `/dashboard`, `/medicines`, `/medicines/:id`, `/batches`, `/low-stock`, `/expiry`, `/suppliers`, `/purchases`, `/sales`, `/analytics`, `/reports`, `/users`, `/profile`, and `/settings`.
+
+## Verification
+
+The production build is the compile/integration check:
+
+```bash
+npm run build
+```
+
+The browser E2E test uses `playwright-core` with the installed Chrome binary and requires a running backend plus replica-set MongoDB:
+
+```bash
+E2E_MONGODB_URI='mongodb://127.0.0.1:27018/pharma_stock_e2e?replicaSet=rs0' E2E_PASSWORD='your-local-test-password' npm run test:e2e
+```
+
+For backend setup, tests, and replica-set transaction requirements, see `Project/docs/TESTING.md` and `Project/docs/DEPLOYMENT.md`.

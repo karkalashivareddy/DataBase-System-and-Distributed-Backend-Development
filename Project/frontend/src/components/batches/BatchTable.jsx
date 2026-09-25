@@ -9,7 +9,8 @@ export default function BatchTable({ items }) {
   const rows = items.map((b) => {
     const d = daysUntil(b.expiryDate);
     let status = b.status;
-    if (d < 0) status = "Expired";
+    if (b.quantity <= 0) status = "Depleted";
+    else if (d < 0) status = "Expired";
     else if (d <= 30) status = "Near Expiry";
     return { ...b, derived: status };
   });
@@ -38,7 +39,7 @@ export default function BatchTable({ items }) {
                 <td>
                   <div className="cell-primary" style={{ cursor: "pointer" }} onClick={() => navigate(`/medicines/${b.medicineId}`)}>{b.medicineName}</div>
                 </td>
-                <td className="text-muted">{b.supplierId}</td>
+                <td className="text-muted">{b.supplierName}</td>
                 <td className="muted">{formatDate(b.manufactureDate)}</td>
                 <td className={d < 0 ? "muted" : ""}>{formatDate(b.expiryDate)}</td>
                 <td style={{ fontWeight: 600 }}>{formatNumber(b.quantity)}</td>

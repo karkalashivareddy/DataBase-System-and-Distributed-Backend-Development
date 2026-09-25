@@ -50,8 +50,8 @@ export default function MedicineTable({ items, onView, onEdit, onDelete, onSort,
               <td>
                 <div className="row-actions" style={{ justifyContent: "flex-end" }}>
                   <button className="icon-btn accent" onClick={() => onView?.(m)} aria-label={`View ${m.name}`} title="View"><Eye size={16} /></button>
-                  <button className="icon-btn" onClick={() => onEdit?.(m)} aria-label={`Edit ${m.name}`} title="Edit"><Pencil size={16} /></button>
-                  <button className="icon-btn danger" onClick={() => onDelete?.(m)} aria-label={`Delete ${m.name}`} title="Delete"><Trash2 size={16} /></button>
+                  {onEdit && <button className="icon-btn" onClick={() => onEdit(m)} aria-label={`Edit ${m.name}`} title="Edit"><Pencil size={16} /></button>}
+                  {onDelete && <button className="icon-btn danger" onClick={() => onDelete(m)} aria-label={`Delete ${m.name}`} title="Delete"><Trash2 size={16} /></button>}
                 </div>
               </td>
             </tr>

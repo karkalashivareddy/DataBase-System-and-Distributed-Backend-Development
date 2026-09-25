@@ -1,200 +1,207 @@
-// Service layer for PharmaStock.
-// Currently backed by frontend demo data, but structured so each function can
-// be swapped to a fetch() call against the Express backend later without
-// touching the UI components. These are NOT real backend API calls.
-import { users as demoUsers, demoCredentials } from "../data/users";
-import { medicines as demoMedicines, suppliers as demoSuppliers } from "../data/medicines";
-import { batches as demoBatches } from "../data/batches";
-import { purchases as demoPurchases, sales as demoSales } from "../data/transactions";
-import {
-  getKpis,
-  getSalesTrend,
-  getCategoryDistribution,
-  getStockHealth,
-  getExpiryTimeline,
-  getLowStockAlerts,
-  getExpiringSoon,
-  getNotifications as dataGetNotifications,
-  getSearchIndex,
-} from "../data/dashboard";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
+const TOKEN_KEY = "pharmastock.token";
 
 export { API_BASE_URL };
 
-// Small helper to simulate network latency so dashboard loading states are visible.
-const delay = (ms = 250) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// ---------- Auth (frontend-only demo; real JWT lives on the backend) ----------
-export async function login(email, password) {
-  await delay();
-  const creds = demoCredentials;
-  if (email === creds.email && password === creds.password) {
-    return { token: "demo-token-0000", user: demoUsers[0] };
+export class ApiError extends Error {
+  constructor(message, status, code, details) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.details = details;
   }
-  const err = new Error("Invalid email or password");
-  err.status = 401;
-  throw err;
 }
 
-// ---------- Dashboard ----------
-export async function getDashboardStats() {
-  await delay();
-  return {
-    kpis: getKpis(),
-    salesTrend: getSalesTrend(),
-    category: getCategoryDistribution(),
-    stockHealth: getStockHealth(),
-    expiryTimeline: getExpiryTimeline(),
-  };
+function token() {
+  return typeof window !== "undefined" ? window.localStorage.getItem(TOKEN_KEY) : null;
 }
 
-export async function getDashboardSales() {
-  await delay(150);
-  return getSalesTrend();
+function queryString(params = {}) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "" && value !== "All") search.set(key, value);
+  }
+  const result = search.toString();
+  return result ? `?${result}` : "";
 }
 
-export async function getInventoryHealth() {
-  await delay(150);
-  return getStockHealth();
+async function request(path, options = {}) {
+  const headers = { Accept: "application/json", ...(options.body ? { "Content-Type": "application/json" } : {}), ...(options.headers || {}) };
+  const accessToken = token();
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || body.success === false) {
+    throw new ApiError(body.error?.message || "Request failed", response.status, body.error?.code, body.error?.details);
+  }
+  return body.data;
 }
 
-export async function getExpirySummary() {
-  await delay(150);
-  return getExpiryTimeline();
+export function login(email, password) {
+  return request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
 }
 
-export async function getDashboardData() {
-  await delay();
-  return {
-    kpis: getKpis(),
-    salesTrend: getSalesTrend(),
-    category: getCategoryDistribution(),
-    stockHealth: getStockHealth(),
-    expiryTimeline: getExpiryTimeline(),
-    lowStockAlerts: getLowStockAlerts(),
-    expiringSoon: getExpiringSoon(),
-    notifications: dataGetNotifications(),
-    searchIndex: getSearchIndex(),
-  };
+export function getCurrentUser() {
+  return request("/auth/me");
 }
 
-export async function getNotifications() {
-  await delay(120);
-  return dataGetNotifications();
+export function updateProfile(data) {
+  return request("/auth/me", { method: "PATCH", body: JSON.stringify(data) });
 }
 
-// ---------- Medicines (frontend demo state; swap for backend fetch later) ----------
-export async function getMedicines() {
-  await delay(150);
-  return demoMedicines;
+export function changePassword(data) {
+  return request("/auth/change-password", { method: "POST", body: JSON.stringify(data) });
 }
 
-export async function getMedicineById(id) {
-  await delay(100);
-  return demoMedicines.find((m) => m.id === id) || null;
+export function getDashboardData() {
+  return request("/dashboard");
 }
 
-export async function createMedicine(data) {
-  await delay(150);
-  return { ...data, id: `med-${Date.now()}` };
+export function getDashboardStats() {
+  return getDashboardData().then((data) => data.kpis);
 }
 
-export async function updateMedicine(id, data) {
-  await delay(150);
-  return { id, ...data };
+export function getDashboardSales() {
+  return getDashboardData().then((data) => data.salesTrend);
 }
 
-export async function deleteMedicine(id) {
-  await delay(100);
-  return { id };
+export function getInventoryHealth() {
+  return getDashboardData().then((data) => data.stockHealth);
 }
 
-// ---------- Batches (frontend demo state) ----------
-export async function getBatches() {
-  await delay(150);
-  return demoBatches();
+export function getExpirySummary() {
+  return getDashboardData().then((data) => data.expiryTimeline);
 }
 
-export async function getBatchById(id) {
-  await delay(100);
-  return demoBatches().find((b) => b.id === id) || null;
+export function getAnalytics({ from, to } = {}) {
+  return request(`/analytics${queryString({ from, to })}`);
 }
 
-export async function getBatchesByMedicine(medicineId) {
-  await delay(100);
-  return (demoBatches() || []).filter((b) => b.medicineId === medicineId);
+export function getMedicines(params) {
+  return request(`/medicines${queryString(params)}`);
 }
 
-export async function createBatch(data) {
-  await delay(150);
-  return { ...data, id: `bat-${Date.now()}` };
+export function getMedicineById(id) {
+  return request(`/medicines/${encodeURIComponent(id)}`);
 }
 
-// ---------- Suppliers (frontend demo state) ----------
-export async function getSuppliers() {
-  await delay(150);
-  return demoSuppliers;
+export function createMedicine(data) {
+  return request("/medicines", { method: "POST", body: JSON.stringify(data) });
 }
 
-export async function getSupplierById(id) {
-  await delay(100);
-  return demoSuppliers.find((s) => s.id === id) || null;
+export function updateMedicine(id, data) {
+  return request(`/medicines/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(data) });
 }
 
-export async function createSupplier(data) {
-  await delay(150);
-  return { ...data, id: `sup-${Date.now()}` };
+export function deleteMedicine(id) {
+  return request(`/medicines/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-export async function updateSupplier(id, data) {
-  await delay(150);
-  return { id, ...data };
+export function getBatches(params) {
+  return request(`/batches${queryString(params)}`);
 }
 
-export async function deleteSupplier(id) {
-  await delay(100);
-  return { id };
+export function getBatchById(id) {
+  return request(`/batches/${encodeURIComponent(id)}`);
 }
 
-// ---------- Transactions (frontend demo state) ----------
-export async function getPurchases() {
-  await delay(150);
-  return demoPurchases();
+export function getBatchesByMedicine(medicineId) {
+  return getBatches({ medicineId, limit: 100 });
 }
 
-export async function getPurchaseById(id) {
-  await delay(100);
-  return demoPurchases().find((p) => p.id === id) || null;
+export function createBatch(data) {
+  return request("/batches", { method: "POST", body: JSON.stringify(data) });
 }
 
-export async function createPurchase(data) {
-  await delay(150);
-  return { ...data, id: `pur-${Date.now()}` };
+export function updateBatch(id, data) {
+  return request(`/batches/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(data) });
 }
 
-export async function getSales() {
-  await delay(150);
-  return demoSales();
+export function deleteBatch(id) {
+  return request(`/batches/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-export async function getSaleById(id) {
-  await delay(100);
-  return demoSales().find((s) => s.id === id) || null;
+export function getSuppliers(params) {
+  return request(`/suppliers${queryString(params)}`);
 }
 
-export async function createSale(data) {
-  await delay(150);
-  return { ...data, id: `sal-${Date.now()}` };
+export function getSupplierById(id) {
+  return request(`/suppliers/${encodeURIComponent(id)}`);
 }
 
-// ---------- Users (frontend demo state) ----------
-export async function getUsers() {
-  await delay(150);
-  return demoUsers;
+export function createSupplier(data) {
+  return request("/suppliers", { method: "POST", body: JSON.stringify(data) });
 }
 
-export async function getUserById(id) {
-  await delay(100);
-  return demoUsers.find((u) => u.id === id) || null;
+export function updateSupplier(id, data) {
+  return request(`/suppliers/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function deleteSupplier(id) {
+  return request(`/suppliers/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function getPurchases(params) {
+  return request(`/purchases${queryString(params)}`);
+}
+
+export function getPurchaseById(id) {
+  return request(`/purchases/${encodeURIComponent(id)}`);
+}
+
+export function createPurchase(data) {
+  return request("/purchases", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function getSales(params) {
+  return request(`/sales${queryString(params)}`);
+}
+
+export function getSaleById(id) {
+  return request(`/sales/${encodeURIComponent(id)}`);
+}
+
+export function createSale(data) {
+  return request("/sales", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function refundSale(id) {
+  return request(`/sales/${encodeURIComponent(id)}/refund`, { method: "POST" });
+}
+
+export function getUsers() {
+  return request("/users");
+}
+
+export function getUserById(id) {
+  return getUsers().then((users) => users.find((user) => user.id === id) || null);
+}
+
+export function createUser(data) {
+  return request("/users", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateUser(id, data) {
+  return request(`/users/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function getNotifications(params) {
+  return request(`/notifications${queryString(params)}`);
+}
+
+export function markNotificationRead(id) {
+  return request(`/notifications/${encodeURIComponent(id)}/read`, { method: "PATCH" });
+}
+
+export function search(query) {
+  return request(`/search${queryString({ q: query })}`);
+}
+
+export function getReport(type, params) {
+  return request(`/reports${queryString({ type, ...params })}`);
+}
+
+export function getAuditLogs(params) {
+  return request(`/audit-logs${queryString(params)}`);
 }

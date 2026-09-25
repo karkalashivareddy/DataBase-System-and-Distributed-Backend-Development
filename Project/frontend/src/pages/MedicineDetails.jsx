@@ -14,11 +14,17 @@ export default function MedicineDetailsPage() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
     setLoaded(false);
+    setMedicine(null);
     api.getMedicineById(id).then((m) => {
-      setMedicine(m);
-      setLoaded(true);
+      if (mounted) setMedicine(m);
+    }).catch(() => {
+      if (mounted) setMedicine(null);
+    }).finally(() => {
+      if (mounted) setLoaded(true);
     });
+    return () => { mounted = false; };
   }, [id]);
 
   if (!loaded) return <LoadingState rows={4} />;

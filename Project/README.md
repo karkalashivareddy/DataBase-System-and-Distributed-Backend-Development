@@ -1,109 +1,62 @@
 ﻿# Medicine Stock Management & Analytics Portal for Pharmaceuticals
 
-## Project Review – 2
+## Project Review – 2/3
 
 **KL UNIVERSITY**
-
 **Project Guide:** Dr. R. Sateesh Kumar
-
-### Team Members
 
 | Name | Roll No. |
 |---|---|
 | KARKALA SHIVA REDDY | 2520030105 |
 | PARIPALLI NAVADEEP | 2520030196 |
 
-## Project Overview
+## Overview
 
-The **Medicine Stock Management & Analytics Portal for Pharmaceuticals** is a centralized inventory management system designed to improve the organization and monitoring of pharmaceutical stock information.
+PharmaStock is a batch-aware pharmaceutical inventory portal. It tracks catalogue medicines, suppliers, stock lots, purchases, sales, expiry risk, low-stock conditions, users, notifications, audit history, analytics, and reports.
 
-The system maintains structured data related to medicines, suppliers, batches, purchases, sales, and inventory levels to provide better visibility and consistency across inventory operations.
+## Current implementation
 
-The portal targets **batch-wise stock tracking**, **low-stock identification**, **near-expiry monitoring**, **role-based access**, and a **visual analytics dashboard** to support faster inventory decisions.
+The project is now a full-stack implementation:
 
-## Current Implementation Status
+- React 18 and Vite frontend with responsive routed screens.
+- Express 4 API with centralized validation, error normalization, Helmet, CORS allowlisting, and rate limits.
+- Mongoose models for users, medicines, suppliers, batches, purchases, sales, notifications, audit logs, and inventory adjustments.
+- JWT authentication with bcrypt password hashing and server-side roles.
+- MongoDB transaction services for stock-changing operations.
+- FEFO sale allocation, refunds, low-stock and expiry calculations, reports, search, and analytics.
+- Guarded development seed, database verification, Node tests, and CI.
 
-> **Milestone 1 (complete):** React/Vite frontend prototype with a full routed dashboard and a bundled demo-data layer. All screen interactions work against local fixtures; the service layer simulates latency so the UI can be evaluated without a backend.
+The local database used during verification is standalone, so stock mutations correctly return `503 TRANSACTIONS_REQUIRED`. A replica-set deployment is required for live inventory transactions.
 
-> **Milestone 2 (planned):** Express + Mongoose + MongoDB backend, REST APIs, JWT authentication, and frontend-backend integration. Not yet implemented.
+## Data flow
 
-The target architecture for the completed system is described below; the code that exists today is limited to the frontend prototype.
+```text
+User action
+  -> React component
+  -> src/services/api.js
+  -> Express route and authorization middleware
+  -> controller/domain service
+  -> Mongoose model
+  -> MongoDB
+  -> normalized JSON response
+  -> React state refresh
+```
 
-## Key Capabilities (frontend prototype)
+`Batch.quantity` is the stock source of truth. Medicine stock, batch status, inventory value, supplier metrics, and dashboard values are derived server-side.
 
-- Medicine management
-- Supplier management
-- Batch-wise stock tracking
-- Purchase and sales transaction recording
-- Low-stock identification
-- Near-expiry monitoring
-- Role-based access (design-time demo only)
-- Analytics dashboard using Recharts
+## Run
 
-## Target System Architecture
+See the root [`README.md`](../README.md) for local setup. API details are in [`docs/API.md`](docs/API.md), and deployment requirements are in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
-**Frontend:** React.js, HTML5, CSS3, JavaScript (ES6+)
+## Documentation
 
-**Backend (planned):** Node.js, Express.js
-
-**API Layer (planned):** RESTful APIs
-
-**Data Access (planned):** Mongoose
-
-**Database (planned):** MongoDB
-
-**Security (planned):** JWT authentication and bcrypt password hashing
-
-### Target Data Flow
-
-User Action → React Interface → RESTful API → Node.js / Express.js → Validation & Authorization → Mongoose → MongoDB → Response → React UI
-
-## Technology Stack
-
-### Frontend (implemented)
-
-- React.js
-- HTML5
-- CSS3
-- JavaScript (ES6+)
-- Recharts
-
-### Backend (planned)
-
-- Node.js
-- Express.js
-
-### Database & ODM (planned)
-
-- MongoDB
-- Mongoose
-
-### API & Security (planned)
-
-- RESTful APIs
-- JWT
-- bcrypt
-
-### Development & Testing Tools
-
-- Postman
-- MongoDB Compass
-- Visual Studio Code
-- npm
-- Git
-- GitHub
-
-## Project Documentation
-
+- [Architecture](docs/ARCHITECTURE.md)
+- [API reference](docs/API.md)
+- [Security](docs/SECURITY.md)
+- [Testing](docs/TESTING.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [Database design](docs/DATABASE_DESIGN.md)
+- [Database schema](docs/DATABASE_SCHEMA.md)
+- [Database setup](docs/DATABASE_SETUP.md)
 - [Abstract](docs/ABSTRACT.md)
-- [Project Review-2 Presentation](docs/Medicine_Stock_Management_Review2_FINAL_MASTER.pptx)
-
-## Academic Context
-
-**Domain:** Database Systems Engineering & Distributed Backend Development
-
-**Review:** Project Review – 2
-
-**University:** KL UNIVERSITY
-
-**Guide:** Dr. R. Sateesh Kumar
+- [Review presentation](docs/Medicine_Stock_Management_Review2_FINAL_MASTER.pptx)

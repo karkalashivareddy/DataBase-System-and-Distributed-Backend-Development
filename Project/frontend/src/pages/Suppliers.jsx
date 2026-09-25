@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import SearchBar from "../components/common/SearchBar";
@@ -14,9 +15,12 @@ import StatusBadge from "../components/common/StatusBadge";
 import * as api from "../services/api";
 import { useToast } from "../contexts/ToastContext";
 import { formatINR } from "../utils/formatters";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function Suppliers() {
   const toast = useToast();
+  const { user } = useAuth();
+  const canManage = ["Admin", "Inventory Manager", "Pharmacist"].includes(user?.role);
   const [items, setItems] = useState(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -28,9 +32,15 @@ export default function Suppliers() {
   const [deleting, setDeleting] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [params, setParams] = useSearchParams();
 
   useEffect(() => {
-    api.getSuppliers().then(setItems);
+    api.getSuppliers().then((data) => {
+      setItems(data);
+      const id = params.get("id");
+      if (id) setViewing(data.find((supplier) => supplier.id === id) || null);
+      if (id) setParams({}, { replace: true });
+    }).catch(() => setItems([]));
   }, []);
 
   const filtered = useMemo(() => {
@@ -50,18 +60,12 @@ export default function Suppliers() {
 
   const submitForm = async (payload) => {
     try {
-      if (editing) {
-        await api.updateSupplier(editing.id, payload);
-        setItems((prev) => prev.map((s) => (s.id === editing.id ? { ...s, ...payload } : s)));
-        toast.success("Updated", "Supplier updated.");
-      } else {
-        await api.createSupplier(payload);
-        setItems((prev) => [payload, ...prev]);
-        toast.success("Added", "Supplier added.");
-      }
+      const saved = editing ? await api.updateSupplier(editing.id, payload) : await api.createSupplier(payload);
+      setItems((prev) => editing ? prev.map((item) => item.id === editing.id ? saved : item) : [saved, ...prev]);
+      toast.success(editing ? "Updated" : "Added", editing ? "Supplier updated." : "Supplier added.");
       setFormOpen(false);
-    } catch {
-      toast.error("Error", "Could not save supplier.");
+    } catch (error) {
+      toast.error("Error", error.message || "Could not save supplier.");
     }
   };
 
@@ -85,7 +89,7 @@ export default function Suppliers() {
       <PageHeader
         title="Suppliers"
         subtitle="Manage the distributors and vendors supplying your inventory."
-        actions={<Button icon={Plus} onClick={() => { setEditing(null); setFormOpen(true); }}>Add Supplier</Button>}
+        actions={canManage ? <Button icon={Plus} onClick={() => { setEditing(null); setFormOpen(true); }}>Add Supplier</Button> : null}
       />
 
       <div className="filter-bar">
@@ -104,8 +108,8 @@ export default function Suppliers() {
           <SupplierTable
             items={paginated}
             onView={setViewing}
-            onEdit={(s) => { setEditing(s); setFormOpen(true); }}
-            onDelete={setDeleting}
+            onEdit={canManage ? (s) => { setEditing(s); setFormOpen(true); } : undefined}
+            onDelete={canManage ? setDeleting : undefined}
           />
           <Pagination
             page={safePage}
@@ -120,7 +124,7 @@ export default function Suppliers() {
         </div>
       )}
 
-      <SupplierForm open={formOpen} onClose={() => setFormOpen(false)} onSubmit={submitForm} initial={editing} />
+      {canManage && <SupplierForm open={formOpen} onClose={() => setFormOpen(false)} onSubmit={submitForm} initial={editing} />}
 
       <ConfirmDialog
         open={!!deleting}
