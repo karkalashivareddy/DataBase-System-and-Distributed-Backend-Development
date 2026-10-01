@@ -35,7 +35,7 @@ The React application uses an HTTP service client rather than production fixture
 7. Refund the sale and verify the original batches are restored.
 8. Show low-stock, expiry, analytics, and reports.
 9. Show an Admin-only audit view and a denied Viewer mutation.
-10. Explain the standalone MongoDB transaction limitation and the required production topology.
+10. Explain why stock transactions require a replica set, and the production topology that provides one.
 
 ## Likely questions
 
@@ -49,7 +49,7 @@ The React application uses an HTTP service client rather than production fixture
 
 **How is authentication secured?** Passwords are bcrypt-hashed. JWTs are verified with issuer, audience, expiry, and current active-user checks. Roles are enforced by the API.
 
-**Why can’t the local sale test run?** The configured local MongoDB is standalone. Transactions require a replica set; the API deliberately returns `503 TRANSACTIONS_REQUIRED` rather than risking inconsistent stock.
+**Why can't the sale test run on a standalone server?** Transactions require a replica set; the API deliberately returns `503 TRANSACTIONS_REQUIRED` rather than risking inconsistent stock. The local verification database is a single-node replica set, so sales, refunds, and adjustments do run locally; the limitation only appears if `MONGODB_URI` is pointed at a standalone `mongod`.
 
 ## Security note
 

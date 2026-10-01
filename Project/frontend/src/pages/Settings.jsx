@@ -79,8 +79,12 @@ export default function Settings() {
         <Button type="submit">Save Preferences</Button>
       </form>
 
+      {/* Stated as it actually behaves: these preferences are per-browser and
+          per-device. They are not stored on the server, so they do not follow the
+          user to another machine, and clearing site data resets them. */}
       <p className="muted text-sm">
-        Preferences are stored locally in your browser (localStorage). Backend persistence will be wired through the API when integrated.
+        Preferences are stored in this browser only (localStorage). They are not saved to your user account, so they do
+        not follow you to another device or browser, and clearing this site's data resets them to their defaults.
       </p>
     </div>
   );

@@ -1,58 +1,118 @@
 # PharmaStock Testing
 
+Four verification layers: dependency-free unit tests, API contract tests, real
+MongoDB transaction integration tests, and a browser end-to-end suite. This
+document explains how to run each one and what it proves.
+
 ## Backend
 
 From `Project/backend`:
 
-```bash
+```powershell
 npm ci
 npm run test:unit
 npm test
 ```
 
-`test/unit.test.js` covers validation normalization, bounds, middleware behavior, reference serialization, and derived batch status. `test/api.test.js` checks the health contract, authentication protection, invalid-login behavior, authenticated read endpoints, reports, and search. The API test skips database-dependent cases when `MONGODB_URI` or a test credential is unavailable.
+| File | Covers |
+|---|---|
+| `test/unit.test.js` | Validation normalization and bounds, unknown-field rejection, UTC date boundaries, FEFO sorting, batch status, serializer totals, partial payment validation |
+| `test/api.test.js` | Health contract, authentication protection, invalid login, authenticated reads, reports, search |
+| `test/transactions.integration.test.js` | Purchase/sale/refund/adjustment against a real replica set, including FEFO order, allocation restore, duplicate-refund rejection, and rollback |
 
-With a seeded development database:
+The API and transaction suites **skip** database-dependent cases when
+`MONGODB_URI` or a test credential is unavailable, so `npm test` stays safe on a
+machine without MongoDB. That skip is why `RUN_TRANSACTION_TESTS` matters.
 
-```bash
-$env:SEED_PASSWORD='your-local-test-password'
-$env:VERIFY_SEED_COUNTS='true'
-npm run verify-db
-npm test
+### Running the transaction suite explicitly
+
+```powershell
+$env:RUN_TRANSACTION_TESTS='true'
+$env:MONGODB_URI='mongodb://127.0.0.1:27018/pharma_stock_management?replicaSet=rs0'
+$env:SEED_PASSWORD='<local test password>'
+npm run test:transactions
 ```
 
-The verification command checks collection counts, required fields, bcrypt hashes, references, sale allocations, and the batch medicine/expiry index.
+Always point it at a **disposable** database name. The suite writes and rolls
+back its own data.
+
+## Database verification
+
+```powershell
+$env:VERIFY_SEED_COUNTS='true'
+npm run verify-db
+```
+
+`verifyDb` checks collection counts, required fields, bcrypt hashes, referential
+integrity, sale allocation arithmetic (allocated quantity equals sold quantity,
+and refunded allocations are restored exactly once), purchase/sale/refund
+chronology, and the required indexes — including unique `batchNo` and the
+compound batch medicine/expiry/quantity index.
 
 ## Frontend
 
 From `Project/frontend`:
 
-```bash
+```powershell
 npm ci
 npm run build
 ```
 
-The production build is the frontend compile/integration check. Browser interaction testing should be run against a real API and a replica-set MongoDB before release.
+The production build is the compile/integration check. There is no React unit
+test runner in this project; behavioural coverage lives in the browser suite.
 
-## Transaction verification
+## Browser end-to-end
 
-A standalone MongoDB server is sufficient for read and CRUD checks but not for stock mutations. To verify FEFO, refunds, and adjustments end-to-end:
+`test/e2e.mjs` starts the API and the Vite dev server itself, so only MongoDB
+needs to be running. It **refuses to start** unless the database name looks
+disposable (`e2e` or `test`), which prevents accidentally running the suite
+against a real dataset.
 
-1. Run MongoDB as a single-node replica set.
-2. Use a disposable database.
-3. Seed it with `SEED_CONFIRM=RESET` and a test-only `SEED_PASSWORD`.
-4. Create a sale spanning batches with different expiry dates.
-5. Assert the earliest unexpired batch is decremented first.
-6. Refund the sale and assert every allocation is restored exactly once.
-7. Attempt an over-sale and assert rollback/409 behavior.
+```powershell
+$env:E2E_MONGODB_URI='mongodb://127.0.0.1:27018/pharmastock_e2e?replicaSet=rs0'
+$env:E2E_PASSWORD='<local test password>'
+npm run test:e2e
+```
 
-The API deliberately returns `503 TRANSACTIONS_REQUIRED` on a standalone server instead of silently losing atomicity.
+Optional: `E2E_API_PORT`, `E2E_WEB_PORT`, `E2E_JWT_SECRET`, `E2E_CHROME_PATH`.
 
-## Current local verification
+The suite covers login and logout, the dashboard, catalogue CRUD, batch creation,
+purchase with partial payment, FEFO sale allocation, insufficient-stock and
+expired-batch rejection, refunds, duplicate-refund rejection, inventory
+adjustments, audit filtering, analytics, report generation with date filtering
+and CSV export, notification acknowledgement, and role-based access control
+(Viewer is blocked from purchases, adjustments, acknowledgements, and the audit
+log). It finishes by asserting that **no browser console errors** occurred.
 
-- `npm run build` in `Project/frontend`: passed.
-- `npm test` in `Project/backend`: 15 passed with `RUN_TRANSACTION_TESTS=true` against a replica set.
-- `npm run verify-db`: passed with exact seeded counts.
-- Authenticated read smoke flow: passed.
-- Sale mutation smoke flow: correctly blocked with `503 TRANSACTIONS_REQUIRED` on the standalone MongoDB instance.
-- `npm run test:e2e` in `Project/frontend`: passed against the real replica-set stack; 15 checks, 0 failed.
+On failure it writes `test-results/e2e-failure.log` and
+`test-results/e2e-failure.png`, which CI uploads as an artifact.
+
+## Transaction requirement
+
+A standalone MongoDB server can serve catalogue reads but **cannot** run stock
+mutations. The API returns `503 TRANSACTIONS_REQUIRED` in that case rather than
+silently losing atomicity. FEFO, refunds, and adjustments must be verified
+against a replica set.
+
+## Dependency auditing
+
+```powershell
+npm audit --audit-level=high   # in both Project/backend and Project/frontend
+```
+
+CI runs the same command and fails on high or critical findings.
+
+## Current verified results
+
+Recorded on the final review pass. See
+[`FINAL_REVIEW_QA.md`](FINAL_REVIEW_QA.md) for the full evidence log.
+
+| Gate | Result |
+|---|---|
+| `npm test` with `RUN_TRANSACTION_TESTS=true` | 25 tests, 25 passed, 0 failed |
+| `npm run verify-db` | `Database verification: PASS` |
+| `npm run build` (frontend) | pass |
+| `npm run test:e2e` | 23 checks passed, 0 failed, plus the console-error assertion |
+| `npm audit --audit-level=high` (backend) | 0 vulnerabilities |
+| `npm audit --audit-level=high` (frontend) | 0 vulnerabilities |
+| CI workflow on GitHub Actions | **not yet executed** |

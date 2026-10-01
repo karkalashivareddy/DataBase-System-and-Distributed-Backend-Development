@@ -8,6 +8,8 @@ import {
   Truck,
   ShoppingCart,
   ShoppingBag,
+  SlidersHorizontal,
+  ScrollText,
   BarChart3,
   FileText,
   Users,
@@ -34,6 +36,9 @@ const NAV = [
       { to: "/suppliers", label: "Suppliers", icon: Truck, key: "suppliers" },
       { to: "/purchases", label: "Purchases", icon: ShoppingCart, key: "purchases" },
       { to: "/sales", label: "Sales", icon: ShoppingBag, key: "sales" },
+      // Adjustments are the only way stock leaves without a sale, so the ledger
+      // that explains every quantity change has to be reachable from the UI.
+      { to: "/adjustments", label: "Adjustments", icon: SlidersHorizontal, key: "adjustments", roles: ["Admin", "Inventory Manager", "Pharmacist"] },
     ],
   },
   {
@@ -47,6 +52,7 @@ const NAV = [
     group: "Administration",
     items: [
       { to: "/users", label: "Users", icon: Users, key: "users", roles: ["Admin"] },
+      { to: "/audit-log", label: "Audit Log", icon: ScrollText, key: "audit-log", roles: ["Admin"] },
       { to: "/settings", label: "Settings", icon: Settings, key: "settings" },
     ],
   },

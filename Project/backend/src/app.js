@@ -12,8 +12,16 @@ const allowedOrigins = (process.env.CLIENT_ORIGIN || "http://localhost:5173")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+// Express must only trust forwarding headers when the app really sits behind a
+// proxy. Trusting them unconditionally lets any client spoof `X-Forwarded-For`
+// and defeat the per-IP rate limiter, so it is opt-in and validated.
+const trustProxy = process.env.TRUST_PROXY;
+if (trustProxy) {
+  if (trustProxy === "true") app.set("trust proxy", 1);
+  else if (trustProxy !== "false") app.set("trust proxy", trustProxy.split(",").map((value) => value.trim()));
+}
+
 app.disable("x-powered-by");
-app.set("trust proxy", 1);
 app.use(helmet());
 app.use(cors({
   origin(origin, callback) {
@@ -22,17 +30,46 @@ app.use(cors({
   },
   methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
+  maxAge: 600,
 }));
 app.use(express.json({ limit: "1mb", strict: true }));
 app.use(express.urlencoded({ extended: false, limit: "1mb" }));
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 1000, standardHeaders: true, legacyHeaders: false }));
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: Number(process.env.RATE_LIMIT_MAX || 1000),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { code: "RATE_LIMITED", message: "Too many requests. Please try again shortly." } },
+}));
 
-app.get("/api/health", (req, res) => {
+// Exposes whether the deployment can actually run stock transactions, so a
+// verifier never has to infer replica-set support from the connection string.
+app.get("/api/health", async (req, res) => {
   const states = ["disconnected", "connected", "connecting", "disconnecting"];
-  res.json({
+  const connected = mongoose.connection.readyState === 1;
+  let replicaSet = null;
+  let primary = null;
+  if (connected) {
+    try {
+      const hello = await mongoose.connection.db.admin().command({ hello: 1 });
+      replicaSet = hello.setName || null;
+      primary = Boolean(hello.isWritablePrimary);
+    } catch {
+      replicaSet = null;
+    }
+  }
+  return res.json({
     success: true,
     message: "PharmaStock API is running",
     database: states[mongoose.connection.readyState] || "unknown",
+    transactions: {
+      // MongoDB requires a replica set or a sharded cluster for multi-document
+      // transactions. A standalone server cannot run purchase/sale/refund/adjust.
+      required: true,
+      supported: Boolean(replicaSet),
+      replicaSet,
+      writablePrimary: primary,
+    },
     time: new Date().toISOString(),
   });
 });

@@ -5,22 +5,18 @@ import Sale from "../models/Sale.js";
 import InventoryAdjustment from "../models/InventoryAdjustment.js";
 import { recordAudit } from "../middleware/audit.js";
 import { adjustInventory, recordPurchase, recordSale, refundSale } from "../services/transactionService.js";
+import { dateRangeFilter } from "../utils/dates.js";
 import { notFound } from "../utils/errors.js";
 import { created, ok, pageMeta, parsePaging } from "../utils/http.js";
-import { serializePurchase, serializeSale } from "../utils/serializers.js";
+import { serializeAdjustment, serializePurchase, serializeSale } from "../utils/serializers.js";
+import { optionalString } from "../utils/validation.js";
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function dateFilter(query) {
-  const filter = {};
-  if (query.from || query.to) {
-    filter.date = {};
-    if (query.from) filter.date.$gte = new Date(query.from);
-    if (query.to) filter.date.$lte = new Date(query.to);
-  }
-  return filter;
+  return dateRangeFilter(query);
 }
 
 export async function listPurchases(req, res) {
@@ -96,22 +92,39 @@ export async function createSale(req, res) {
 }
 
 export async function refundSaleController(req, res) {
+  const reason = optionalString(req.body.reason, "reason", { max: 240 });
   const row = await refundSale(req.params.id, req.user._id);
-  await recordAudit(req, { action: "SALE_REFUND", entityType: "Sale", entityId: row._id, metadata: { saleNo: row.saleNo } });
-  return ok(res, serializeSale(row));
+  const populated = await Sale.findById(row._id).populate("medicine", "name").populate("batch", "batchNo").populate("createdBy", "name role");
+  await recordAudit(req, {
+    action: "SALE_REFUND",
+    entityType: "Sale",
+    entityId: row._id,
+    metadata: { saleNo: row.saleNo, quantity: row.quantity, reason: reason || "" },
+  });
+  return ok(res, serializeSale(populated));
 }
 
 export async function adjustInventoryController(req, res) {
   const row = await adjustInventory(req.body, req.user._id);
   await recordAudit(req, { action: "INVENTORY_ADJUSTMENT", entityType: "InventoryAdjustment", entityId: row._id, metadata: { quantityDelta: row.quantityDelta, reason: row.reason } });
-  return created(res, row);
+  const populated = await InventoryAdjustment.findById(row._id).populate("medicine", "name").populate("batch", "batchNo").populate("createdBy", "name role");
+  return created(res, serializeAdjustment(populated));
 }
 
 export async function listAdjustments(req, res) {
   const { page, limit, skip } = parsePaging(req.query, 50, 100);
+  const filter = {};
+  if (req.query.medicineId) filter.medicine = req.query.medicineId;
+  if (req.query.batchId) filter.batch = req.query.batchId;
   const [total, rows] = await Promise.all([
-    InventoryAdjustment.countDocuments(),
-    InventoryAdjustment.find().populate("medicine", "name").populate("batch", "batchNo").sort({ createdAt: -1 }).skip(skip).limit(limit),
+    InventoryAdjustment.countDocuments(filter),
+    InventoryAdjustment.find(filter)
+      .populate("medicine", "name")
+      .populate("batch", "batchNo")
+      .populate("createdBy", "name role")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
   ]);
-  return ok(res, rows, pageMeta(total, page, limit));
+  return ok(res, rows.map(serializeAdjustment), pageMeta(total, page, limit));
 }

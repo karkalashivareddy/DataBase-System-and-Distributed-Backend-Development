@@ -12,6 +12,11 @@ import Purchase from "../src/models/Purchase.js";
 import Sale from "../src/models/Sale.js";
 import Notification from "../src/models/Notification.js";
 import AuditLog from "../src/models/AuditLog.js";
+import InventoryAdjustment from "../src/models/InventoryAdjustment.js";
+
+function idOf(value) {
+  return value ? String(value._id || value) : "";
+}
 
 const enabled = process.env.RUN_TRANSACTION_TESTS === "true" && Boolean(process.env.MONGODB_URI && process.env.SEED_PASSWORD);
 const password = process.env.SEED_PASSWORD;
@@ -72,6 +77,7 @@ after(async () => {
       Batch.deleteMany({ _id: { $in: createdEntityIds } }),
       Purchase.deleteMany({ medicine: medicine?._id }),
       Sale.deleteMany({ medicine: medicine?._id }),
+      InventoryAdjustment.deleteMany({ medicine: medicine?._id }),
       Notification.deleteMany({ entityId: { $in: createdEntityIds } }),
       AuditLog.deleteMany({ entityId: { $in: createdEntityIds } }),
     ]);
@@ -135,4 +141,75 @@ test("forced failure after batch mutation rolls back sale and inventory", async 
   }
   assert.deepEqual(await Batch.findById(rollbackBatch._id).lean(), before);
   assert.equal(await Sale.countDocuments({ medicine: medicine._id }), saleCount);
+});
+
+test("refund returns exactly the allocated units to the allocated batches", async (t) => {
+  if (!enabled) return t.skip("set RUN_TRANSACTION_TESTS=true with a replica-set MONGODB_URI");
+  const sale = (await Sale.find({ medicine: medicine._id, status: "Completed" }).sort({ createdAt: -1 }).lean())[0];
+  assert.ok(sale, "a completed sale is required for the refund test");
+  const before = new Map();
+  for (const allocation of sale.allocations) {
+    before.set(idOf(allocation.batch), (await Batch.findById(allocation.batch).lean()).quantity);
+  }
+  const result = await request(`/sales/${sale._id}/refund`, { method: "POST", headers: auth(true), body: JSON.stringify({ reason: "Automated refund test" }) });
+  assert.equal(result.status, 200, JSON.stringify(result.body));
+  const refunded = await Sale.findById(sale._id).lean();
+  assert.equal(refunded.status, "Refunded");
+  assert.ok(refunded.refundedAt, "a refund must record when it happened");
+  for (const allocation of sale.allocations) {
+    const batch = await Batch.findById(allocation.batch).lean();
+    assert.equal(batch.quantity, before.get(idOf(allocation.batch)) + allocation.quantity, `batch ${allocation.batchNo} was not replenished`);
+  }
+  assert.equal(await AuditLog.countDocuments({ action: "SALE_REFUND", entityId: sale._id }), 1);
+  // A refund is final; the same sale cannot be refunded twice and double the stock.
+  const second = await request(`/sales/${sale._id}/refund`, { method: "POST", headers: auth(true), body: JSON.stringify({ reason: "duplicate" }) });
+  assert.equal(second.status, 409);
+  for (const allocation of sale.allocations) {
+    const batch = await Batch.findById(allocation.batch).lean();
+    assert.equal(batch.quantity, before.get(idOf(allocation.batch)) + allocation.quantity);
+  }
+});
+
+test("inventory adjustment records before/after and never drives stock negative", async (t) => {
+  if (!enabled) return t.skip("set RUN_TRANSACTION_TESTS=true with a replica-set MONGODB_URI");
+  const target = await Batch.findOne({ _id: rollbackBatch._id }).lean();
+  const result = await request("/adjustments", { method: "POST", headers: auth(true), body: JSON.stringify({ medicineId: String(medicine._id), batchId: String(rollbackBatch._id), quantityDelta: -7, reason: "Automated adjustment test" }) });
+  assert.equal(result.status, 201, JSON.stringify(result.body));
+  assert.equal(result.body.data.quantityBefore, target.quantity);
+  assert.equal(result.body.data.quantityAfter, target.quantity - 7);
+  assert.equal(result.body.data.quantityDelta, -7);
+  assert.equal((await Batch.findById(rollbackBatch._id).lean()).quantity, target.quantity - 7);
+  assert.equal(await AuditLog.countDocuments({ action: "INVENTORY_ADJUSTMENT", entityId: result.body.data.id }), 1);
+  // More units than the batch holds must be refused outright.
+  const oversized = await request("/adjustments", { method: "POST", headers: auth(true), body: JSON.stringify({ medicineId: String(medicine._id), batchId: String(rollbackBatch._id), quantityDelta: -9999, reason: "oversized" }) });
+  assert.equal(oversized.status, 409);
+  assert.equal((await Batch.findById(rollbackBatch._id).lean()).quantity, target.quantity - 7);
+  // A zero delta is not a meaningful adjustment.
+  const zero = await request("/adjustments", { method: "POST", headers: auth(true), body: JSON.stringify({ medicineId: String(medicine._id), batchId: String(rollbackBatch._id), quantityDelta: 0, reason: "zero" }) });
+  assert.equal(zero.status, 400);
+});
+
+test("direct batch quantity and cost writes are refused over HTTP", async (t) => {
+  if (!enabled) return t.skip("set RUN_TRANSACTION_TESTS=true with a replica-set MONGODB_URI");
+  const before = await Batch.findById(batchB._id).lean();
+  const quantity = await request(`/batches/${batchB._id}`, { method: "PATCH", headers: auth(true), body: JSON.stringify({ quantity: 999 }) });
+  assert.equal(quantity.status, 400);
+  assert.match(quantity.body.error.message, /cannot be edited directly/i);
+  const cost = await request(`/batches/${batchB._id}`, { method: "PATCH", headers: auth(true), body: JSON.stringify({ costPerUnit: 999 }) });
+  assert.equal(cost.status, 400);
+  const create = await request("/batches", { method: "POST", headers: auth(true), body: JSON.stringify({ medicineId: String(medicine._id), supplierId: String(supplier._id), manufactureDate: day(-1).toISOString(), expiryDate: day(90).toISOString(), quantity: 50, costPerUnit: 2 }) });
+  assert.equal(create.status, 400, "creating a batch with stock must be refused");
+  assert.deepEqual(await Batch.findById(batchB._id).lean(), before);
+});
+
+test("a batch cannot be reassigned away from its recorded ledger", async (t) => {
+  if (!enabled) return t.skip("set RUN_TRANSACTION_TESTS=true with a replica-set MONGODB_URI");
+  const other = await Medicine.create({ name: `CI Other ${suffix}`, generic: "Other Generic", category: "Other", manufacturer: "CI", unitPrice: 5, reorderLevel: 1 });
+  createdEntityIds.push(other._id);
+  // batchB has recorded sale allocations, so moving it to another medicine would
+  // detach those allocations and corrupt COGS.
+  const result = await request(`/batches/${batchB._id}`, { method: "PATCH", headers: auth(true), body: JSON.stringify({ medicineId: String(other._id) }) });
+  assert.equal(result.status, 400);
+  assert.match(result.body.error.message, /cannot be reassigned/i);
+  assert.equal(String((await Batch.findById(batchB._id).lean()).medicine), String(medicine._id));
 });

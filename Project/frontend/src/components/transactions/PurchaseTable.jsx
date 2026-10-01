@@ -14,6 +14,10 @@ export default function PurchaseTable({ items }) {
             <th>Quantity</th>
             <th>Unit Cost</th>
             <th>Total</th>
+            {/* Outstanding is what makes a partial payment visible; without the
+                column the status badge hides how much money is still owed. */}
+            <th>Paid</th>
+            <th>Outstanding</th>
             <th>Date</th>
             <th>Status</th>
           </tr>
@@ -28,6 +32,8 @@ export default function PurchaseTable({ items }) {
               <td>{formatNumber(p.quantity)}</td>
               <td className="money">{formatINR(p.unitCost)}</td>
               <td className="money" style={{ fontWeight: 600 }}>{formatINR(p.total)}</td>
+              <td className="money">{formatINR(p.paidAmount ?? (p.status === "Paid" ? p.total : 0))}</td>
+              <td className="money">{formatINR(p.outstanding ?? Math.max(0, (p.total || 0) - (p.paidAmount ?? (p.status === "Paid" ? p.total : 0))))}</td>
               <td className="muted">{formatDate(p.date)}</td>
               <td><StatusBadge status={p.status} /></td>
             </tr>

@@ -141,10 +141,10 @@ export default function Login() {
               {errors.password && <span className="field-error">{errors.password}</span>}
             </div>
 
+            {/* No "Remember me" checkbox: the session token is held in localStorage for this
+                academic build, so there is no separate persistence choice to make
+                and offering one would imply a control that does not exist. */}
             <div className="flex-between" style={{ marginBottom: 22 }}>
-              <label className="check-row">
-                <input type="checkbox" /> Remember me
-              </label>
               <a href="mailto:admin@pharmastock.in">Contact administrator</a>
             </div>
 
@@ -160,6 +160,13 @@ export default function Login() {
           </p>
           <p className="muted text-sm" style={{ textAlign: "center", marginTop: 8 }}>
             KL UNIVERSITY · Database Systems &amp; Distributed Backend Development
+          </p>
+          {/* Security posture is stated plainly rather than implied. A
+              cookie-based session would be the production choice; see the
+              authentication section of the README for the known exposure. */}
+          <p className="muted text-sm" style={{ textAlign: "center", marginTop: 8, maxWidth: 380 }}>
+            Academic build. The session token is stored in this browser's localStorage, which means it is readable by any
+            script that runs on this page. Do not reuse this deployment with real credentials.
           </p>
         </div>
       </div>

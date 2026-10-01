@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { batchStatus } from "../utils/serializers.js";
 
 const batchSchema = new mongoose.Schema(
   {
@@ -13,16 +14,12 @@ const batchSchema = new mongoose.Schema(
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
+// The virtual delegates to the shared helper rather than re-deriving the rule,
+// so a document rendered by Mongoose can never disagree with the status the API
+// serializes for the same batch. Both truncate to a UTC day, which keeps the
+// boundary on the same calendar day in any server timezone.
 batchSchema.virtual("status").get(function getStatus() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const expiry = new Date(this.expiryDate);
-  expiry.setHours(0, 0, 0, 0);
-  const days = Math.round((expiry - today) / 86400000);
-  if (days < 0) return "Expired";
-  if (this.quantity <= 0) return "Depleted";
-  if (days <= 30) return "Near Expiry";
-  return "Active";
+  return batchStatus({ quantity: this.quantity, expiryDate: this.expiryDate });
 });
 
 batchSchema.pre("validate", function validateDates(next) {

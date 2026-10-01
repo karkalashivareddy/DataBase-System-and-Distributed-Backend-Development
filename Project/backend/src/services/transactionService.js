@@ -9,39 +9,62 @@ import Supplier from "../models/Supplier.js";
 import InventoryAdjustment from "../models/InventoryAdjustment.js";
 import { PURCHASE_STATUSES } from "../constants.js";
 import { AppError, badRequest, conflict, notFound } from "../utils/errors.js";
+import { startOfDayUtc } from "../utils/dates.js";
 
 function roundMoney(value) {
   return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
-}
-
-function startOfDay(date = new Date()) {
-  const result = new Date(date);
-  result.setHours(0, 0, 0, 0);
-  return result;
 }
 
 function documentNumber(prefix) {
   return `${prefix}-${new Date().getUTCFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
-async function atomic(work) {
+// MongoDB forbids running operations in parallel inside a transaction: a
+// session serialises commands and `Promise.all` on one session produces
+// undefined interleavings. Every read inside `atomic` below is therefore awaited
+// sequentially.
+async function findByIdForUpdate(model, id, session) {
+  return model.findById(id).session(session);
+}
+
+const TRANSACTION_UNAVAILABLE =
+  /transaction numbers are only allowed|replica set|mongos|not supported on standalone|Transactions are not supported/i;
+
+export async function withTransaction(work) {
+  if (mongoose.connection.readyState !== 1) {
+    throw new AppError("The database connection is not ready", { status: 503, code: "DATABASE_UNAVAILABLE" });
+  }
   const session = await mongoose.startSession();
-  let result;
   try {
+    let result;
     await session.withTransaction(async () => {
       result = await work(session);
     });
     return result;
   } catch (error) {
     if (error instanceof AppError) throw error;
-    if (error?.code === 20 || /transaction numbers are only allowed|replica set/i.test(error?.message || "")) {
+    if (error?.code === 20 || error?.codeName === "IllegalOperation" || TRANSACTION_UNAVAILABLE.test(error?.message || "")) {
       throw new AppError("This operation requires MongoDB replica-set transactions", { status: 503, code: "TRANSACTIONS_REQUIRED" });
+    }
+    if (error?.code === 251) {
+      throw new AppError("No replica-set primary is available to run this transaction", { status: 503, code: "PRIMARY_UNAVAILABLE" });
+    }
+    if (error?.code === 11000) {
+      throw new AppError("A record with that value already exists", { status: 409, code: "DUPLICATE_RECORD" });
+    }
+    if (error?.name === "ValidationError") {
+      throw new AppError("Request validation failed", { status: 400, code: "VALIDATION_ERROR", details: Object.values(error.errors).map((item) => item.message) });
+    }
+    if (error?.hasErrorLabel?.("TransientTransactionError")) {
+      throw new AppError("The transaction could not be completed because of a temporary database error; retry the request", { status: 503, code: "TRANSIENT_TRANSACTION_ERROR" });
     }
     throw error;
   } finally {
     await session.endSession();
   }
 }
+
+const atomic = withTransaction;
 
 export function sortFefoBatches(batches) {
   return [...batches].sort((left, right) => new Date(left.expiryDate) - new Date(right.expiryDate) || new Date(left.createdAt || 0) - new Date(right.createdAt || 0) || String(left._id).localeCompare(String(right._id)));
@@ -52,17 +75,15 @@ export async function recordPurchase(input, userId) {
   const unitCost = input.unitCost === undefined ? undefined : roundMoney(input.unitCost);
   const paidAmount = input.paidAmount === undefined ? undefined : roundMoney(input.paidAmount);
   const result = await atomic(async (session) => {
-    const [medicine, supplier, batch] = await Promise.all([
-      Medicine.findById(input.medicineId).session(session),
-      Supplier.findById(input.supplierId).session(session),
-      Batch.findById(input.batchId).session(session),
-    ]);
+    const medicine = await findByIdForUpdate(Medicine, input.medicineId, session);
+    const supplier = await findByIdForUpdate(Supplier, input.supplierId, session);
+    const batch = await findByIdForUpdate(Batch, input.batchId, session);
     if (!medicine) throw notFound("Medicine not found");
     if (!supplier) throw notFound("Supplier not found");
     if (!batch) throw notFound("Batch not found");
     if (String(batch.medicine) !== String(medicine._id)) throw badRequest("Batch does not belong to the selected medicine");
     if (String(batch.supplier) !== String(supplier._id)) throw badRequest("Batch does not belong to the selected supplier");
-    if (batch.expiryDate < startOfDay()) throw badRequest("Expired batches cannot receive stock");
+    if (batch.expiryDate < startOfDayUtc()) throw badRequest("Expired batches cannot receive stock");
     if (!Number.isInteger(quantity) || quantity < 1) throw badRequest("Quantity must be a positive integer");
     const cost = unitCost === undefined ? roundMoney(batch.costPerUnit) : unitCost;
     if (!Number.isFinite(cost) || cost < 0) throw badRequest("Unit cost must be a valid non-negative number");
@@ -118,7 +139,7 @@ export async function recordSale(input, userId) {
     const batches = sortFefoBatches(await Batch.find({
       medicine: medicine._id,
       quantity: { $gt: 0 },
-      expiryDate: { $gte: startOfDay() },
+      expiryDate: { $gte: startOfDayUtc() },
     }).session(session));
     const available = batches.reduce((sum, batch) => sum + batch.quantity, 0);
     if (available < quantity) throw conflict("Insufficient available stock", { requested: quantity, available });
@@ -190,23 +211,31 @@ export async function adjustInventory(input, userId) {
   const delta = Number(input.quantityDelta);
   if (!Number.isInteger(delta) || delta === 0) throw badRequest("Quantity adjustment must be a non-zero integer");
   return atomic(async (session) => {
-    const [medicine, batch] = await Promise.all([
-      Medicine.findById(input.medicineId).session(session),
-      Batch.findById(input.batchId).session(session),
-    ]);
+    const medicine = await findByIdForUpdate(Medicine, input.medicineId, session);
+    const batch = await findByIdForUpdate(Batch, input.batchId, session);
     if (!medicine) throw notFound("Medicine not found");
     if (!batch) throw notFound("Batch not found");
     if (String(batch.medicine) !== String(medicine._id)) throw badRequest("Batch does not belong to the selected medicine");
     if (batch.quantity + delta < 0) throw conflict("Adjustment would make batch quantity negative", { current: batch.quantity, delta });
     batch.quantity += delta;
     await batch.save({ session });
-    return InventoryAdjustment.create([{
+    const [adjustment] = await InventoryAdjustment.create([{
       medicine: medicine._id,
       batch: batch._id,
       quantityDelta: delta,
+      quantityBefore: batch.quantity - delta,
+      quantityAfter: batch.quantity,
       reason: input.reason,
       note: input.note || "",
       createdBy: userId,
-    }], { session }).then(([adjustment]) => adjustment);
+    }], { session });
+    await Notification.create([{
+      type: "system",
+      title: `Inventory adjusted — ${medicine.name}`,
+      message: `${delta > 0 ? "+" : ""}${delta} units on ${batch.batchNo} (${adjustment.quantityBefore} -> ${adjustment.quantityAfter}). Reason: ${adjustment.reason}.`,
+      entityType: "InventoryAdjustment",
+      entityId: adjustment._id,
+    }], { session });
+    return adjustment;
   });
 }

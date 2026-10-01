@@ -43,7 +43,11 @@ router.get("/purchases/:id", authorize(...READ_ROLES), asyncHandler(getPurchase)
 router.get("/sales", authorize(...READ_ROLES), asyncHandler(listSales));
 router.post("/sales", authorize(...TRANSACTION_ROLES), validateBody(saleRules), asyncHandler(createSale));
 router.get("/sales/:id", authorize(...READ_ROLES), asyncHandler(getSale));
-router.post("/sales/:id/refund", authorize(...INVENTORY_ROLES), asyncHandler(refundSaleController));
+// The reason is optional but recorded in the audit entry, because a refund with
+// no stated cause is the hardest kind of stock change to defend after the fact.
+router.post("/sales/:id/refund", authorize(...INVENTORY_ROLES), validateBody({
+  reason: [(value) => optionalString(value, "reason", { max: 240 })],
+}), asyncHandler(refundSaleController));
 router.get("/adjustments", authorize(...INVENTORY_ROLES), asyncHandler(listAdjustments));
 router.post("/adjustments", authorize(...INVENTORY_ROLES), validateBody(adjustmentRules), asyncHandler(adjustInventoryController));
 

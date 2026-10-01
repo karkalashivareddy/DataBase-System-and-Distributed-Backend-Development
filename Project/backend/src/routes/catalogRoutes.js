@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { immutableField } from "../utils/errors.js";
 import { authorize, authenticate } from "../middleware/auth.js";
 import { INVENTORY_ROLES, MEDICINE_CATEGORIES, READ_ROLES, SUPPLIER_STATUSES } from "../constants.js";
-import { dateValue, enumValue, numberValue, objectId, optionalString, requiredString, validEmail, validateBody } from "../utils/validation.js";
+import { dateValue, enumValue, numberValue, objectId, optionalString, rejectFields, requiredString, validEmail, validateBody } from "../utils/validation.js";
 import { createBatch, createMedicine, createSupplier, deleteBatch, deleteMedicine, deleteSupplier, getBatch, getMedicine, getSupplier, listBatches, listMedicines, listSuppliers, search, updateBatch, updateMedicine, updateSupplier } from "../controllers/catalogController.js";
 
 const router = Router();
@@ -18,13 +19,16 @@ const medicineRules = {
   reorderLevel: [(value) => numberValue(value, "reorderLevel", { min: 0, integer: true })],
 };
 
+// A batch is created empty. Stock and cost are introduced only by a purchase so
+// that Batch.quantity, the Purchase ledger and the audit log cannot disagree.
 const batchRules = {
+  batchNo: [(value) => requiredString(value, "batchNo", { min: 2, max: 80 })],
   medicineId: [(value) => objectId(value, "medicineId")],
   supplierId: [(value) => objectId(value, "supplierId")],
   manufactureDate: [(value) => dateValue(value, "manufactureDate")],
   expiryDate: [(value) => dateValue(value, "expiryDate")],
-  quantity: [(value) => numberValue(value, "quantity", { min: 0, integer: true })],
-  costPerUnit: [(value) => numberValue(value, "costPerUnit", { min: 0 })],
+  quantity: [rejectFields("A new batch cannot be given stock directly. Create it empty, then record a purchase to add quantity and cost.", immutableField)],
+  costPerUnit: [rejectFields("A new batch cannot be given a cost directly. Record a purchase, which sets the weighted-average unit cost.", immutableField)],
 };
 
 const updateMedicineRules = {
@@ -38,12 +42,19 @@ const updateMedicineRules = {
 };
 
 const updateBatchRules = {
+  batchNo: [(value) => optionalString(value, "batchNo", { max: 80 })],
   medicineId: [(value) => objectId(value, "medicineId", { required: false })],
   supplierId: [(value) => objectId(value, "supplierId", { required: false })],
   manufactureDate: [(value) => dateValue(value, "manufactureDate", { required: false })],
   expiryDate: [(value) => dateValue(value, "expiryDate", { required: false })],
-  quantity: [(value) => numberValue(value, "quantity", { min: 0, integer: true, required: false })],
-  costPerUnit: [(value) => numberValue(value, "costPerUnit", { min: 0, required: false })],
+  // `Batch.quantity` is the single source of truth for stock and `costPerUnit`
+  // feeds inventory value and cost of goods sold. Neither may be edited through a
+  // generic update, otherwise the inventory ledger can be bypassed without an
+  // audit entry or a transaction. Both are writable only through the controlled
+  // workflows: POST /purchases, POST /sales, POST /sales/:id/refund and
+  // POST /adjustments.
+  quantity: [rejectFields("Batch quantity cannot be edited directly. Use a purchase, sale, refund or inventory adjustment to change stock.", immutableField)],
+  costPerUnit: [rejectFields("Batch cost cannot be edited directly. Record a purchase to change a batch's weighted-average cost.", immutableField)],
 };
 
 const supplierRules = {

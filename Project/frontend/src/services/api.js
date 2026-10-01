@@ -26,7 +26,7 @@ function queryString(params = {}) {
   return result ? `?${result}` : "";
 }
 
-async function request(path, options = {}) {
+async function requestWithMeta(path, options = {}) {
   const headers = { Accept: "application/json", ...(options.body ? { "Content-Type": "application/json" } : {}), ...(options.headers || {}) };
   const accessToken = token();
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
@@ -35,7 +35,11 @@ async function request(path, options = {}) {
   if (!response.ok || body.success === false) {
     throw new ApiError(body.error?.message || "Request failed", response.status, body.error?.code, body.error?.details);
   }
-  return body.data;
+  return { data: body.data, meta: body.meta || {} };
+}
+
+async function request(path, options = {}) {
+  return (await requestWithMeta(path, options)).data;
 }
 
 export function login(email, password) {
@@ -166,8 +170,11 @@ export function createSale(data) {
   return request("/sales", { method: "POST", body: JSON.stringify(data) });
 }
 
-export function refundSale(id) {
-  return request(`/sales/${encodeURIComponent(id)}/refund`, { method: "POST" });
+export function refundSale(id, reason) {
+  return request(`/sales/${encodeURIComponent(id)}/refund`, {
+    method: "POST",
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
 }
 
 export function getUsers() {
@@ -184,6 +191,13 @@ export function createUser(data) {
 
 export function updateUser(id, data) {
   return request(`/users/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+// Returns the page metadata as well as the rows, because the unread count is a
+    // server-side total and cannot be derived from the current page of results.
+export async function getNotificationsPage(params) {
+  const response = await requestWithMeta(`/notifications${queryString(params)}`);
+  return { rows: response.data || [], meta: response.meta || {} };
 }
 
 export function getNotifications(params) {
@@ -204,4 +218,26 @@ export function getReport(type, params) {
 
 export function getAuditLogs(params) {
   return request(`/audit-logs${queryString(params)}`);
+}
+
+// Paginated screens need the server's `meta.totalPages` to render the pager.
+// `request` discards meta, so the paged variant is exposed separately.
+export function getAuditLogsPage(params) {
+  return requestWithMeta(`/audit-logs${queryString(params)}`);
+}
+
+export function getAdjustmentsPage(params) {
+  return requestWithMeta(`/adjustments${queryString(params)}`);
+}
+
+export function getAuditLogActions() {
+  return request("/audit-logs/actions");
+}
+
+export function getAdjustments(params) {
+  return request(`/adjustments${queryString(params)}`);
+}
+
+export function createAdjustment(data) {
+  return request("/adjustments", { method: "POST", body: JSON.stringify(data) });
 }

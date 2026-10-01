@@ -39,20 +39,32 @@ export function formatDateShort(iso) {
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
 }
 
+// Expiry counting is anchored to the current UTC day, matching the backend's
+// Batch.status and expiry-risk calculations. Using local midnight here would
+// make a batch look one day closer to expiry than the server reports for anyone
+// in a positive-offset timezone.
+function startOfUTCDay(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
 export function daysUntil(iso) {
-  const d = new Date(iso);
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  d.setHours(0, 0, 0, 0);
-  return Math.round((d - now) / (1000 * 60 * 60 * 24));
+  if (!iso) return NaN;
+  const target = startOfUTCDay(iso);
+  if (target === null) return NaN;
+  return Math.round((target - startOfUTCDay(new Date())) / 86400000);
 }
 
 export function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Date arithmetic runs in UTC so a value produced here matches the date the
+// backend stores for the same logical day.
 export function addDaysISO(iso, days) {
-  const d = new Date(iso);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  const date = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return iso;
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }

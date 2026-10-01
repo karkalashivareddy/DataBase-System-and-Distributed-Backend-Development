@@ -46,6 +46,10 @@ export default function Sales() {
   const safePage = Math.min(page, pageCount);
   const paginated = filtered.slice((safePage - 1) * itemsPerPage, safePage * itemsPerPage);
 
+  // Refunds are restricted to the same roles that manage stock, because the
+  // refund endpoint puts units back into the batch ledger.
+  const canRefund = ["Admin", "Inventory Manager", "Pharmacist"].includes(user?.role);
+
   const submit = async (payload) => {
     try {
       const saved = await api.createSale(payload);
@@ -55,6 +59,13 @@ export default function Sales() {
     } catch (error) {
       toast.error("Error", error.message || "Could not record sale.");
     }
+  };
+
+  const refund = async (saleId, reason) => {
+    const updated = await api.refundSale(saleId, reason);
+    setItems((prev) => prev.map((sale) => (sale.id === updated.id ? updated : sale)));
+    toast.success("Refund recorded", `Invoice ${updated.saleNo} returned ${updated.quantity} unit(s) to stock.`);
+    return updated;
   };
 
   if (!items) return <LoadingState rows={4} />;
@@ -84,7 +95,7 @@ export default function Sales() {
         <EmptyState title="No sales found" subtitle="Try adjusting your search or filters." />
       ) : (
         <div className="table-wrap">
-          <SalesTable items={paginated} />
+          <SalesTable items={paginated} onRefund={refund} canRefund={canRefund} />
           <Pagination
             page={safePage}
             pageCount={pageCount}

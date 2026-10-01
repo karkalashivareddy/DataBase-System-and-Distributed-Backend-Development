@@ -51,6 +51,19 @@ export const REPORT_TYPES = {
 };
 
 export const CURRENCIES = ["INR ₹", "USD $", "EUR €"];
+
+// Reasons offered for an inventory adjustment. Kept as a fixed list so the value
+// recorded in the ledger is comparable across adjustments rather than free text.
+export const REASONS = [
+  "Expired stock write-off",
+  "Damaged in storage",
+  "Breakage reported during audit",
+  "Short count correction",
+  "Found stock during physical audit",
+  "Returned to supplier",
+  "Stock take reconciliation",
+];
+
 export const DATE_FORMATS = [
   { value: "en-IN", label: "DD MMM YYYY" },
   { value: "en-US", label: "MM/DD/YYYY" },

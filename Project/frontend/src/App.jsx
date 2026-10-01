@@ -14,6 +14,8 @@ import Sales from "./pages/Sales";
 import Analytics from "./pages/Analytics";
 import Reports from "./pages/Reports";
 import Users from "./pages/Users";
+import Adjustments from "./pages/Adjustments";
+import AuditLog from "./pages/AuditLog";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
@@ -75,8 +77,14 @@ export default function App() {
       <Route path="/reports" element={<ProtectedLayout />}>
         <Route index element={<Reports />} />
       </Route>
+      <Route path="/adjustments" element={<ProtectedLayout />}>
+        <Route index element={<RoleRoute roles={["Admin", "Inventory Manager", "Pharmacist"]}><Adjustments /></RoleRoute>} />
+      </Route>
       <Route path="/users" element={<ProtectedLayout />}>
         <Route index element={<RoleRoute roles={["Admin"]}><Users /></RoleRoute>} />
+      </Route>
+      <Route path="/audit-log" element={<ProtectedLayout />}>
+        <Route index element={<RoleRoute roles={["Admin"]}><AuditLog /></RoleRoute>} />
       </Route>
       <Route path="/profile" element={<ProtectedLayout />}>
         <Route index element={<Profile />} />

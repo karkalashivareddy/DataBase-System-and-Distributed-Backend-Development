@@ -13,6 +13,17 @@
 - Audit records capture actor, action, entity, IP address, metadata, and timestamp.
 - Stock writes use MongoDB transactions and guarded quantity updates. There is no non-atomic fallback.
 - Error responses hide internal 5xx details when `NODE_ENV=production`.
+- Users cannot change their own role or status, and cannot deactivate their own account.
+- Audit metadata is built from an explicit field whitelist, so credential-shaped input is never recorded.
+
+## Known limitations
+
+These are deliberate academic/demo trade-offs, not oversights:
+
+- **JWT in `localStorage`.** The token is readable by any script on the origin, so an XSS flaw would leak the session. A production build should use a short-lived `HttpOnly`, `Secure`, `SameSite=Strict` cookie with refresh-token rotation.
+- **Settings in `localStorage`.** UI preferences are per browser and per user of that browser. They are not an authorization boundary and must never hold anything sensitive.
+- **No refresh tokens.** An expired token ends the session.
+- **No automated accessibility scanner or penetration test** has been run against this codebase. Access control has been verified functionally (role matrix exercised by the browser E2E suite), not with a dedicated security scanner.
 
 ## Secret handling
 

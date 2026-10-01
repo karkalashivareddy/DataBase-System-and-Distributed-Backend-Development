@@ -26,7 +26,7 @@ The project is now a full-stack implementation:
 - FEFO sale allocation, refunds, low-stock and expiry calculations, reports, search, and analytics.
 - Guarded development seed, database verification, Node tests, and CI.
 
-The local database used during verification is standalone, so stock mutations correctly return `503 TRANSACTIONS_REQUIRED`. A replica-set deployment is required for live inventory transactions.
+Stock-changing endpoints require a MongoDB replica set because purchases, sales, refunds, and adjustments run inside transactions. A standalone deployment can still serve catalogue reads, and returns `503 TRANSACTIONS_REQUIRED` for any stock mutation instead of silently writing inconsistent data.
 
 ## Data flow
 
@@ -59,4 +59,7 @@ See the root [`README.md`](../README.md) for local setup. API details are in [`d
 - [Database schema](docs/DATABASE_SCHEMA.md)
 - [Database setup](docs/DATABASE_SETUP.md)
 - [Abstract](docs/ABSTRACT.md)
+- [Final review report](docs/FINAL_REVIEW_REPORT.md)
+- [Final QA evidence](docs/FINAL_REVIEW_QA.md)
+- [Final demo script](docs/FINAL_DEMO_SCRIPT.md)
 - [Review presentation](docs/Medicine_Stock_Management_Review2_FINAL_MASTER.pptx)

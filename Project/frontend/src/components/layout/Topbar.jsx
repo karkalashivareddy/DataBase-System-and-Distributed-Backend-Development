@@ -41,13 +41,16 @@ const TITLES = {
   "/dashboard": "Dashboard",
   "/medicines": "Medicines",
   "/batches": "Batches",
+  "/low-stock": "Low Stock",
+  "/expiry": "Expiry",
   "/suppliers": "Suppliers",
   "/purchases": "Purchases",
   "/sales": "Sales",
-  "/alerts": "Low Stock & Expiry Alerts",
+  "/adjustments": "Inventory Adjustments",
   "/analytics": "Analytics",
   "/reports": "Reports",
   "/users": "Users",
+  "/audit-log": "Audit Log",
   "/settings": "Settings",
   "/profile": "Profile",
 };
@@ -63,6 +66,7 @@ export default function Topbar({ onToggleSidebar }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [notifs, setNotifs] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [searchResults, setSearchResults] = useState(null);
   const debounced = useDebounce(query, 250);
 
@@ -77,10 +81,17 @@ export default function Topbar({ onToggleSidebar }) {
 
   useEffect(() => {
     let mounted = true;
-    api.getNotifications({ limit: 10 }).then((rows) => {
-      if (mounted) setNotifs(rows);
+    // The badge is driven by the server's unread total, not by how many rows
+    // happen to fit in the panel, so it stays honest as alerts grow.
+    api.getNotificationsPage({ limit: 10 }).then(({ rows, meta }) => {
+      if (!mounted) return;
+      setNotifs(rows);
+      setUnreadCount(Number(meta.unread || 0));
     }).catch(() => {
-      if (mounted) setNotifs([]);
+      if (mounted) {
+        setNotifs([]);
+        setUnreadCount(0);
+      }
     });
     return () => { mounted = false; };
   }, []);
@@ -102,13 +113,16 @@ export default function Topbar({ onToggleSidebar }) {
 
   const hasResults = searchResults && (searchResults.medicines.length || searchResults.suppliers.length || searchResults.batches.length || searchResults.transactions.length);
 
+  // Each search result navigates to the screen that actually owns it. Falling
+  // back to a single page for every kind would drop a user on an unrelated list.
   const goTo = (kind, id) => {
     setSearchOpen(false);
     setQuery("");
     if (kind === "medicine") navigate(`/medicines/${id}`);
     else if (kind === "supplier") navigate(`/suppliers?id=${id}`);
     else if (kind === "batch") navigate(`/batches?id=${id}`);
-    else navigate("/sales");
+    else if (kind === "purchase") navigate(`/purchases?id=${id}`);
+    else navigate(`/sales?id=${id}`);
   };
 
   const handleLogout = () => {
@@ -198,10 +212,10 @@ export default function Topbar({ onToggleSidebar }) {
               <>
                 <div className="search-group-label">Transactions</div>
                 {searchResults.transactions.map((t) => (
-                  <div key={t.id} className="search-result-item" onClick={() => goTo("txn", t.id)}>
+                  <div key={t.id} className="search-result-item" onClick={() => goTo(t.kind, t.id)}>
                     <DocIcon />
                     <span>{t.label}</span>
-                    <span className="sri-sub">{t.kind}</span>
+                    <span className="sri-sub">{t.kindLabel}</span>
                   </div>
                 ))}
               </>
@@ -212,18 +226,21 @@ export default function Topbar({ onToggleSidebar }) {
 
       {/* Notifications */}
       <div style={{ position: "relative" }} ref={notifRef}>
-        <button className="topbar-btn" onClick={() => setNotifOpen((v) => !v)} aria-label="Notifications">
+        <button className="topbar-btn" onClick={() => setNotifOpen((v) => !v)} aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} awaiting review` : "Notifications"}>
           <Bell size={19} />
-          <span className="notif-dot">{notifs.length}</span>
+          {unreadCount > 0 && <span className="notif-dot">{unreadCount > 99 ? "99+" : unreadCount}</span>}
         </button>
         {notifOpen && (
           <div className="notif-panel">
-            <div className="notif-header">
-              <span>Notifications</span>
-              <button className="icon-btn" onClick={() => setNotifOpen(false)} aria-label="Close notifications">
-                <ChevronRight size={16} style={{ transform: "rotate(90deg)" }} />
-              </button>
-            </div>
+<div className="notif-header">
+            <span>Alerts awaiting review</span>
+            <button className="icon-btn" onClick={() => setNotifOpen(false)} aria-label="Close notifications">
+              <ChevronRight size={16} style={{ transform: "rotate(90deg)" }} />
+            </button>
+          </div>
+            {/* The badge counts alerts that no member of staff has reviewed yet.
+                These alerts are shared, so the panel says so instead of implying
+                a personal inbox. */}
             <div className="notif-list">
               {notifs.map((n) => {
                 const meta = NOTIF_META[n.type] || NOTIF_META.system;
@@ -235,11 +252,15 @@ export default function Topbar({ onToggleSidebar }) {
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: 13.5 }}>{n.title}</div>
                       <div className="muted text-sm">{n.message}</div>
-                      <div className="muted text-sm" style={{ fontSize: 11.5, marginTop: 2 }}>{n.time}</div>
+                      <div className="muted text-sm" style={{ fontSize: 11.5, marginTop: 2 }}>
+                        {n.time}
+                        {n.read && n.acknowledgedByEmail ? ` · reviewed by ${n.acknowledgedByEmail}` : ""}
+                      </div>
                     </div>
                   </div>
                 );
               })}
+              {notifs.length === 0 && <p className="muted text-sm" style={{ padding: 10 }}>No alerts to review.</p>}
             </div>
           </div>
         )}

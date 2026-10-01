@@ -16,6 +16,13 @@ export function badRequest(message, details) {
   return new AppError(message, { status: 400, code: "VALIDATION_ERROR", details });
 }
 
+// A rejected attempt to change protected state. This is kept distinct from a
+// generic validation failure so a client can tell "your field is malformed" from
+// "quantity is not editable here", which needs a different message and flow.
+export function immutableField(message, details) {
+  return new AppError(message, { status: 400, code: "BATCH_STOCK_IMMUTABLE", details });
+}
+
 export function unauthorized(message = "Authentication required") {
   return new AppError(message, { status: 401, code: "UNAUTHENTICATED" });
 }

@@ -27,9 +27,13 @@ export async function updateProfile(req, res) {
   const updates = {};
   const name = optionalString(req.body.name, "name", { max: 120 });
   const phone = optionalString(req.body.phone, "phone", { max: 30 });
-  if (name) updates.name = name;
+  if (name !== undefined) updates.name = name;
   if (phone !== undefined) updates.phone = phone;
-  if (Object.keys(updates).length) await User.findByIdAndUpdate(req.user._id, updates, { new: true, runValidators: true }).then((user) => { req.user = user; });
+  if (Object.keys(updates).length === 0) throw badRequest("No editable profile fields were supplied");
+  // Role, status and email are deliberately not updatable here: privilege changes
+  // go through the Admin user endpoint, which is audited as USER_UPDATE.
+  const user = await User.findByIdAndUpdate(req.user._id, updates, { new: true, runValidators: true });
+  req.user = user;
   await recordAudit(req, { action: "PROFILE_UPDATE", entityType: "User", entityId: req.user._id, metadata: updates });
   return ok(res, serializeUser(req.user));
 }
@@ -70,7 +74,13 @@ export async function updateUser(req, res) {
     if (req.body[field] !== undefined) updates[field] = req.body[field];
   }
   if (req.body.email !== undefined) updates.email = validEmail(req.body.email, "email");
-  if (String(req.params.id) === String(req.user._id) && updates.status === "Inactive") throw badRequest("You cannot deactivate your own account");
+  if (Object.keys(updates).length === 0) throw badRequest("No editable user fields were supplied");
+  if (String(req.params.id) === String(req.user._id)) {
+    // An admin who removes their own Admin role or deactivates their own account
+    // locks everyone out of user administration, so it is refused explicitly.
+    if (updates.status === "Inactive") throw badRequest("You cannot deactivate your own account");
+    if (updates.role && updates.role !== req.user.role) throw badRequest("You cannot change your own role");
+  }
   const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
   if (!user) throw notFound("User not found");
   await recordAudit(req, { action: "USER_UPDATE", entityType: "User", entityId: user._id, metadata: updates });

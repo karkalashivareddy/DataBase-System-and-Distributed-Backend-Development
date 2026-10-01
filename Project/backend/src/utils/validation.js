@@ -3,6 +3,17 @@ import { badRequest } from "./errors.js";
 
 const isEmpty = (value) => value === undefined || value === null || value === "";
 
+// Numbers arriving as JSON must be genuine numbers or numeric strings. Booleans,
+// arrays, objects and nullish-but-present values are rejected instead of being
+// silently coerced (Number(true) === 1 would otherwise be accepted).
+function isNumericInput(value) {
+  if (typeof value === "number") return true;
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  if (trimmed === "") return false;
+  return /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/.test(trimmed);
+}
+
 export function requiredString(value, field, { min = 1, max = 500 } = {}) {
   if (isEmpty(value) || typeof value !== "string" || value.trim().length < min) {
     throw badRequest(`${field} is required`, { field });
@@ -35,6 +46,7 @@ export function numberValue(value, field, { min = -Infinity, max = Infinity, int
     if (required) throw badRequest(`${field} is required`, { field });
     return undefined;
   }
+  if (!isNumericInput(value)) throw badRequest(`${field} must be a number`, { field });
   const result = Number(value);
   if (!Number.isFinite(result) || result < min || result > max || (integer && !Number.isInteger(result))) {
     throw badRequest(`${field} must be a valid number`, { field });
@@ -70,15 +82,36 @@ export function dateValue(value, field, { required = true } = {}) {
   return result;
 }
 
-export function validateBody(schema) {
+// Guards fields that must never be writable through a generic update endpoint.
+// The message names the controlled workflow so the API contract is self-explanatory.
+// Usage: `quantity: [rejectFields("Batch quantity cannot be edited directly...")]`
+export function rejectFields(message, buildError = badRequest) {
+  return function rejectProtectedFields(value, field) {
+    if (value !== undefined) throw buildError(message, { field });
+    return undefined;
+  };
+}
+
+// Replaces the request body with exactly the fields declared in `schema`. The
+// normalised values replace the raw input, so a rule that maps `"  12  "` to
+// `12` is what downstream code receives. Nothing the client sent survives unless
+// the route explicitly opted out via allowUnknownFields.
+export function validateBody(schema, { allowUnknownFields = false } = {}) {
   return function validateRequestBody(req, res, next) {
     try {
-      const body = req.body && typeof req.body === "object" ? req.body : {};
+      const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+      if (!allowUnknownFields) {
+        const known = new Set(Object.keys(schema));
+        const unknown = Object.keys(body).filter((key) => !known.has(key));
+        if (unknown.length) {
+          throw badRequest(`Unexpected field(s): ${unknown.sort().join(", ")}`, { fields: unknown.sort() });
+        }
+      }
       const result = {};
       for (const [field, rules] of Object.entries(schema)) {
         for (const rule of rules) result[field] = rule(body[field], field, body);
       }
-      req.body = { ...body, ...result };
+      req.body = allowUnknownFields ? { ...body, ...result } : result;
       next();
     } catch (error) {
       next(error);

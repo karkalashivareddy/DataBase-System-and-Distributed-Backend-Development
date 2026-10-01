@@ -4,6 +4,14 @@ on:
   push:
   pull_request:
 
+env:
+  CI_MONGODB_URI: mongodb://127.0.0.1:27017/pharmastock_ci?replicaSet=rs0
+  CI_JWT_SECRET: ci-only-secret-with-at-least-32-characters
+  CI_SEED_PASSWORD: CI-Only-Password-2026!
+  # One Node version is pinned and shared by every job so the backend, the
+  # frontend build and the browser run cannot drift apart.
+  NODE_VERSION: "20.19.0"
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -14,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20.19.0
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: Project/backend/package-lock.json
       - run: npm ci
@@ -26,22 +34,21 @@ jobs:
           until [ "$(docker exec pharmastock-mongo mongosh --quiet --eval 'db.hello().isWritablePrimary')" = "true" ]; do sleep 2; done
       - name: Seed CI database
         env:
-          MONGODB_URI: mongodb://127.0.0.1:27017/pharmastock_ci?replicaSet=rs0
-          JWT_SECRET: ci-only-secret-with-at-least-32-characters
+          MONGODB_URI: ${{ env.CI_MONGODB_URI }}
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
           SEED_CONFIRM: RESET
-          SEED_PASSWORD: CI-Only-Password-2026!
+          SEED_PASSWORD: ${{ env.CI_SEED_PASSWORD }}
         run: npm run seed -- --force
       - name: Verify CI database
         env:
-          MONGODB_URI: mongodb://127.0.0.1:27017/pharmastock_ci?replicaSet=rs0
-          JWT_SECRET: ci-only-secret-with-at-least-32-characters
-          VERIFY_SEED_COUNTS: "true"
+          MONGODB_URI: ${{ env.CI_MONGODB_URI }}
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
         run: npm run verify-db
       - name: Run backend tests
         env:
-          MONGODB_URI: mongodb://127.0.0.1:27017/pharmastock_ci?replicaSet=rs0
-          JWT_SECRET: ci-only-secret-with-at-least-32-characters
-          SEED_PASSWORD: CI-Only-Password-2026!
+          MONGODB_URI: ${{ env.CI_MONGODB_URI }}
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
+          SEED_PASSWORD: ${{ env.CI_SEED_PASSWORD }}
           RUN_TRANSACTION_TESTS: "true"
         run: npm test
       - run: npm audit --audit-level=high
@@ -55,9 +62,67 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20.19.0
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: Project/frontend/package-lock.json
       - run: npm ci
       - run: npm run build
       - run: npm audit --audit-level=high
+
+  e2e:
+    # The browser suite needs the API, the dev server and a seeded database, and
+    # it is the only job that proves the two halves are actually wired together.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Project/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: Project/frontend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - name: Install backend dependencies
+        working-directory: Project/backend
+        run: npm ci
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('Project/frontend/package-lock.json') }}
+      - name: Install Playwright Chromium
+        working-directory: Project/frontend
+        run: npx --no-install playwright-core install --with-deps chromium
+      - name: Start MongoDB replica set
+        run: |
+          docker run --name pharmastock-mongo -d -p 27017:27017 mongo:7.0 mongod --replSet rs0 --bind_ip_all
+          until docker exec pharmastock-mongo mongosh --quiet --eval "db.adminCommand({ ping: 1 }).ok" | grep 1; do sleep 2; done
+          docker exec pharmastock-mongo mongosh --quiet --eval "rs.initiate({_id:'rs0',members:[{_id:0,host:'127.0.0.1:27017'}]})"
+          until [ "$(docker exec pharmastock-mongo mongosh --quiet --eval 'db.hello().isWritablePrimary')" = "true" ]; do sleep 2; done
+      - name: Seed E2E database
+        working-directory: Project/backend
+        env:
+          MONGODB_URI: ${{ env.CI_MONGODB_URI }}
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
+          SEED_CONFIRM: RESET
+          SEED_PASSWORD: ${{ env.CI_SEED_PASSWORD }}
+        run: npm run seed -- --force
+      - name: Run browser E2E suite
+        env:
+          E2E_MONGODB_URI: ${{ env.CI_MONGODB_URI }}
+          E2E_PASSWORD: ${{ env.CI_SEED_PASSWORD }}
+          E2E_JWT_SECRET: ${{ env.CI_JWT_SECRET }}
+          E2E_CHROME_PATH: ""
+        run: npm run test:e2e
+      - name: Upload E2E evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-log
+          path: Project/frontend/test-results/
+          if-no-files-found: ignore
