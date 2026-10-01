@@ -7,6 +7,7 @@ import Purchase from "../models/Purchase.js";
 import Sale from "../models/Sale.js";
 import Supplier from "../models/Supplier.js";
 import InventoryAdjustment from "../models/InventoryAdjustment.js";
+import AuditLog from "../models/AuditLog.js";
 import { PURCHASE_STATUSES } from "../constants.js";
 import { AppError, badRequest, conflict, notFound } from "../utils/errors.js";
 import { startOfDayUtc } from "../utils/dates.js";
@@ -66,11 +67,28 @@ export async function withTransaction(work) {
 
 const atomic = withTransaction;
 
+/**
+ * Writes the audit row for a stock movement on the same session as the movement.
+ * `build` is supplied by the controller and receives the document the movement
+ * just wrote, returning the shape produced by `auditDocument` — which already
+ * captured the actor, IP and user agent from the request. Passing a builder
+ * rather than a literal keeps request capture in the controller/middleware and
+ * the commit boundary here, while still letting the audit metadata quote the
+ * values the transaction actually committed.
+ */
+async function auditInSession(session, build, document) {
+  if (typeof build !== "function") return null;
+  const entry = build(document);
+  if (!entry) return null;
+  const [log] = await AuditLog.create([entry], { session });
+  return log;
+}
+
 export function sortFefoBatches(batches) {
   return [...batches].sort((left, right) => new Date(left.expiryDate) - new Date(right.expiryDate) || new Date(left.createdAt || 0) - new Date(right.createdAt || 0) || String(left._id).localeCompare(String(right._id)));
 }
 
-export async function recordPurchase(input, userId) {
+export async function recordPurchase(input, userId, buildAudit) {
   const quantity = Number(input.quantity);
   const unitCost = input.unitCost === undefined ? undefined : roundMoney(input.unitCost);
   const paidAmount = input.paidAmount === undefined ? undefined : roundMoney(input.paidAmount);
@@ -122,12 +140,16 @@ export async function recordPurchase(input, userId) {
       entityType: "Purchase",
       entityId: purchase[0]._id,
     }], { session });
+    // Last write inside the transaction on purpose: if the audit insert fails,
+    // the batch increment and the purchase row roll back with it rather than
+    // leaving stock that moved with no record of why.
+    await auditInSession(session, buildAudit, purchase[0]);
     return purchase[0];
   });
   return result;
 }
 
-export async function recordSale(input, userId) {
+export async function recordSale(input, userId, buildAudit) {
   const quantity = Number(input.quantity);
   const unitPrice = input.unitPrice === undefined ? undefined : roundMoney(input.unitPrice);
   if (!Number.isInteger(quantity) || quantity < 1) throw badRequest("Quantity must be a positive integer");
@@ -179,12 +201,13 @@ export async function recordSale(input, userId) {
       entityType: "Sale",
       entityId: sale[0]._id,
     }], { session });
+    await auditInSession(session, buildAudit, sale[0]);
     return sale[0];
   });
   return result;
 }
 
-export async function refundSale(saleId, userId) {
+export async function refundSale(saleId, userId, buildAudit) {
   return atomic(async (session) => {
     const sale = await Sale.findById(saleId).session(session);
     if (!sale) throw notFound("Sale not found");
@@ -203,11 +226,12 @@ export async function refundSale(saleId, userId) {
       entityType: "Sale",
       entityId: sale._id,
     }], { session });
+    await auditInSession(session, buildAudit, sale);
     return sale;
   });
 }
 
-export async function adjustInventory(input, userId) {
+export async function adjustInventory(input, userId, buildAudit) {
   const delta = Number(input.quantityDelta);
   if (!Number.isInteger(delta) || delta === 0) throw badRequest("Quantity adjustment must be a non-zero integer");
   return atomic(async (session) => {
@@ -236,6 +260,7 @@ export async function adjustInventory(input, userId) {
       entityType: "InventoryAdjustment",
       entityId: adjustment._id,
     }], { session });
+    await auditInSession(session, buildAudit, adjustment);
     return adjustment;
   });
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Menu,
@@ -12,6 +12,7 @@ import {
   Truck,
   Layers,
   FileText,
+  Check,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
@@ -27,6 +28,11 @@ function useClickOutside(ref, handler) {
     return () => document.removeEventListener("mousedown", onClick);
   }, [ref, handler]);
 }
+
+// The alert feed is shared, and acknowledging one is a state change. The API
+// restricts it to inventory roles, so the button is offered to exactly the same
+// roles. This mirrors the server rule for usability; the server is the boundary.
+const ACKNOWLEDGE_ROLES = ["Admin", "Inventory Manager", "Pharmacist"];
 
 const NOTIF_META = {
   low: { label: "Low stock", tone: "status-warning" },
@@ -79,22 +85,31 @@ export default function Topbar({ onToggleSidebar }) {
 
   const current = TITLES[location.pathname] || "PharmaStock";
 
+  // One loader for the badge, the panel, and the post-acknowledgement refresh, so
+  // the unread total and the visible rows can never disagree.
+  const loadNotifications = useCallback(
+    () =>
+      api.getNotificationsPage({ limit: 10 }).then(({ rows, meta }) => {
+        setNotifs(rows);
+        setUnreadCount(Number(meta.unread || 0));
+      }),
+    []
+  );
+
   useEffect(() => {
     let mounted = true;
     // The badge is driven by the server's unread total, not by how many rows
-    // happen to fit in the panel, so it stays honest as alerts grow.
-    api.getNotificationsPage({ limit: 10 }).then(({ rows, meta }) => {
-      if (!mounted) return;
-      setNotifs(rows);
-      setUnreadCount(Number(meta.unread || 0));
-    }).catch(() => {
+    // happen to fit in the panel, so it stays honest as alerts grow. It reloads
+    // on every navigation as well as on first mount, because a purchase, sale,
+    // refund or adjustment performed on the previous screen changes the count.
+    loadNotifications().catch(() => {
       if (mounted) {
         setNotifs([]);
         setUnreadCount(0);
       }
     });
     return () => { mounted = false; };
-  }, []);
+  }, [location.pathname, loadNotifications]);
 
   useEffect(() => {
     const q = debounced.trim();
@@ -129,6 +144,18 @@ export default function Topbar({ onToggleSidebar }) {
     logout();
     toast.info("Logged out", "You have been signed out.");
     navigate("/login");
+  };
+
+  const canAcknowledge = ACKNOWLEDGE_ROLES.includes(user?.role);
+
+  const acknowledge = async (id) => {
+    try {
+      await api.markNotificationRead(id);
+      await loadNotifications();
+      toast.success("Alert reviewed", "Your name is recorded as the reviewer.");
+    } catch (error) {
+      toast.error("Could not acknowledge", error.message);
+    }
   };
 
   return (
@@ -232,12 +259,12 @@ export default function Topbar({ onToggleSidebar }) {
         </button>
         {notifOpen && (
           <div className="notif-panel">
-<div className="notif-header">
-            <span>Alerts awaiting review</span>
-            <button className="icon-btn" onClick={() => setNotifOpen(false)} aria-label="Close notifications">
-              <ChevronRight size={16} style={{ transform: "rotate(90deg)" }} />
-            </button>
-          </div>
+            <div className="notif-header">
+              <span>Alerts awaiting review</span>
+              <button className="icon-btn" onClick={() => setNotifOpen(false)} aria-label="Close notifications">
+                <ChevronRight size={16} style={{ transform: "rotate(90deg)" }} />
+              </button>
+            </div>
             {/* The badge counts alerts that no member of staff has reviewed yet.
                 These alerts are shared, so the panel says so instead of implying
                 a personal inbox. */}
@@ -257,6 +284,17 @@ export default function Topbar({ onToggleSidebar }) {
                         {n.read && n.acknowledgedByEmail ? ` · reviewed by ${n.acknowledgedByEmail}` : ""}
                       </div>
                     </div>
+                    {!n.read && canAcknowledge && (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        data-testid={`acknowledge-${n.id}`}
+                        style={{ marginLeft: "auto", alignSelf: "flex-start", flexShrink: 0 }}
+                        onClick={() => acknowledge(n.id)}
+                      >
+                        <Check size={13} /> Mark reviewed
+                      </button>
+                    )}
                   </div>
                 );
               })}

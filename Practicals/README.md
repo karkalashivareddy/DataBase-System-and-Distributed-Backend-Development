@@ -14,4 +14,4 @@ Practical exercises for the **Database Systems** course component, submitted as 
 | Week 8 | `Week-8/KARKALA_SHIVA_REDDY_2520030105_Week_8_DB_DS_Practical.docx` | Report |
 | Week 9 | `Week-9/KARKALA_SHIVA_REDDY_2520030105_Week_9_DB_DS_Practical.docx` | Report |
 
-Each weekly folder contains the submitted report in DOCX format. The accompanying PharmaStock project is maintained under [`../Project/`](../Project/). The Week 9 Student Management implementation is under [`../Project/Week-9-Student-Management/`](../Project/Week-9-Student-Management/).
+Each weekly folder contains the submitted report in DOCX format. The accompanying PharmaStock project is maintained under [`../Project/`](../Project/), and its documentation is in [`../Project/docs/`](../Project/docs/).

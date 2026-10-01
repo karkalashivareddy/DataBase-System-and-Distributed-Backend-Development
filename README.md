@@ -31,17 +31,17 @@ PharmaStock treats **the batch as the unit of truth**. Stock never changes direc
 
 - **Catalogue** — 34 seeded medicines across 10 categories with generic name, manufacturer, dosage, unit price, and reorder level.
 - **Suppliers** — supplier records with purchase history, payment compliance, and supplied-medicine rollups.
-- **Batches** — lot tracking with `batchNo`, supplier, expiry date, quantity, and cost per unit.
-- **Purchases** — purchase with items, partial payments, supplier linkage, and automatic batch creation or top-up.
+- **Batches** — lot tracking with `batchNo`, supplier, expiry date, quantity, and cost per unit. A batch is registered empty; stock enters only through a purchase.
+- **Purchases** — inbound stock against an existing batch, with partial payments, supplier linkage, and weighted-average cost.
 - **Sales** — FEFO allocation across batches with allocation records retained per sale line.
 - **Refunds** — restore the exact original batch allocations of a sale; a sale can be refunded only once.
 - **Inventory adjustments** — increase/decrease with a mandatory reason, recorded as an auditable stock movement.
-- **Expiry & low stock** — expiry buckets, low-stock detection against per-medicine reorder levels, and a shared alert feed.
+- **Expiry & low stock** — expiry buckets, low-stock detection against per-medicine reorder levels, and a shared alert feed that records who reviewed each alert.
 - **Analytics** — revenue, COGS, gross margin, stock value, expiry exposure, supplier performance, and month-bucketed trends.
 - **Reports** — inventory, sales, purchase, expiry, low-stock, and supplier reports with CSV export.
 - **Audit log** — actor, action, entity, and metadata for every mutation; credentials are never stored.
 - **Search** — cross-catalogue search with deep links to the relevant record.
-- **Users & RBAC** — Admin, Inventory Manager, Pharmacist, and Sales Staff roles.
+- **Users & RBAC** — Admin, Inventory Manager, Pharmacist, Sales Staff, and Viewer roles.
 - **Settings** — theme, currency, date format, and page size, persisted per browser.
 
 ## Architecture
@@ -69,15 +69,17 @@ A request flows: route → `authorize()` → `asyncHandler` → body normalizati
 
 | Collection | Purpose | Notable indexes |
 |---|---|---|
-| `users` | Accounts, roles, status | `email` unique, text index |
-| `medicines` | Catalogue | text index on name/generic/manufacturer |
-| `suppliers` | Vendor records | name, status |
-| `batches` | Lots with expiry, quantity, cost | unique `batchNo`, compound medicine/expiry/quantity |
-| `purchases` + `purchaseitems` | Inbound stock, partial payments | purchase number, date |
-| `sales` + `saleitems` + `allocations` | Outbound stock with FEFO allocation | unique sale number, date, status |
-| `inventoryadjustments` | Manual stock movements with reason | medicine, date |
-| `notifications` | Shared expiry/low-stock alerts | type, read |
-| `auditlogs` | Mutation trail | actor, action, entity, createdAt |
+| `users` | Accounts, roles, status | `email` unique, compound `{ role, status }` |
+| `medicines` | Catalogue | `name`/`generic`/`manufacturer` individually indexed, plus a text index over all three |
+| `suppliers` | Vendor records | `name` unique, `status`, text index on `name`/`contact` |
+| `batches` | Lots with expiry, quantity, cost | unique `batchNo`, compound `{ medicine, expiryDate, quantity }`, `{ expiryDate, quantity }` |
+| `purchases` | One inbound stock line per document (supplier, medicine, batch, quantity, cost, payment) | `purchaseNo` unique, `date`, compound `{ supplier, date }` |
+| `sales` | One outbound document per sale, embedding its `allocations` subdocuments | `saleNo` unique, `date`, compound `{ medicine, date }` |
+| `inventoryadjustments` | Manual stock movements with reason and before/after quantities | `medicine`, `batch`, `createdBy`, descending `createdAt` |
+| `notifications` | Shared expiry/low-stock alerts and their reviewer | `type`, `read`, descending `createdAt`, TTL on `expiresAt` |
+| `auditlogs` | Mutation trail | `action`, `entityType`, `entityId`, `actor`, descending `createdAt`, compound `{ entityType, entityId, createdAt }` |
+
+Purchases and sales are single-line documents, not parent/child pairs — `allocations` is an embedded array on `sales`, so there is no separate `saleitems` or `allocations` collection to join.
 
 ### Validation rules
 
@@ -89,16 +91,17 @@ A request flows: route → `authorize()` → `asyncHandler` → body normalizati
 
 ## Authentication & RBAC
 
-JWT bearer authentication; passwords are hashed with bcrypt. `GET /api/auth/me` revalidates the token on startup and clears invalid sessions.
+JWT bearer authentication; passwords are hashed with bcrypt (cost 12). `GET /api/auth/me` revalidates the token on startup and clears invalid sessions.
 
 | Role | Access |
 |---|---|
 | Admin | Everything, including user management and the audit log |
-| Inventory Manager | Purchases, sales, refunds, adjustments, batches, suppliers, notifications |
-| Pharmacist | Catalogue, stock and expiry reads, sales |
-| Sales Staff | Sales and catalogue reads |
+| Inventory Manager | Purchases, sales, refunds, adjustments, batches, suppliers, notification acknowledgement |
+| Pharmacist | Catalogue, batch and supplier writes, sales, notification acknowledgement |
+| Sales Staff | Sales and all read endpoints |
+| Viewer | Read-only: dashboard, analytics, reports, catalogue, batches, suppliers, purchases, sales, and the shared alert feed. No writes of any kind |
 
-Authorization is enforced by `authorize(...)` in the route layer, so hiding a button is never the security boundary. The E2E suite proves a Viewer account cannot purchase, adjust stock, acknowledge alerts, or read the audit log.
+Authorization is enforced by `authorize(...)` in the route layer, so hiding a button is never the security boundary. The browser E2E suite proves a Viewer account cannot purchase, adjust stock, acknowledge an alert, or read the audit log, and the API contract suite asserts the same `403`s.
 
 ### Known security limitation (intentional, documented)
 
@@ -108,7 +111,7 @@ The JWT is stored in `localStorage` to keep the demo simple, and Settings are st
 
 Purchases, sales, refunds, and adjustments each open a MongoDB session and run inside `session.withTransaction`. That means the ledger line, the batch quantity, the allocation records, the notification side effects, and the audit record all commit or roll back together.
 
-- A crash or validation failure mid-sale rolls the whole operation back — no partial batch decrement, no orphan allocation.
+- A crash or validation failure mid-sale rolls the whole operation back — no partial batch decrement, no orphan allocation, and no audit entry describing a movement that did not happen.
 - Concurrent sales serialize on the same batches, so the FEFO check and the decrement cannot interleave.
 - A standalone `mongod` cannot run these transactions. The API returns `503 TRANSACTIONS_REQUIRED` for stock writes instead of pretending to succeed. **A replica set is required.**
 
@@ -116,11 +119,11 @@ Purchases, sales, refunds, and adjustments each open a MongoDB session and run i
 
 ## Workflows
 
-**Purchase** — select supplier → add items → set quantities and per-unit cost → optionally record a paid amount → submit. Each item creates or tops up a batch, which is why a new batch always starts at quantity `0` and cost `0`. Outstanding payment is derived from `total - paidAmount` and shown in the purchase table.
+**Purchase** — create an empty batch first (`POST /batches`), then select supplier, medicine and that batch → set quantity and per-unit cost → optionally record a paid amount → submit. A purchase always targets an existing batch and tops it up, which is why a new batch starts at quantity `0` and cost `0`. The batch's `costPerUnit` becomes a weighted average across the purchases received into it, and outstanding payment is derived from `total - paidAmount`.
 
-**Sale (FEFO)** — select medicine and quantity → the service loads only batches with `quantity > 0` and `expiryDate >= today UTC`, sorts them by expiry ascending, and consumes them in order, writing an allocation record per batch consumed. Insufficient or fully-expired stock is rejected with a specific error rather than a generic failure. The sale records its COGS from the allocated batch costs, so margin reporting stays accurate after partial refunds.
+**Sale (FEFO)** — select medicine and quantity → the service loads only batches with `quantity > 0` and `expiryDate >= today UTC`, sorts them by expiry ascending, and consumes them in order, writing an allocation record per batch consumed. Insufficient or fully-expired stock is rejected with a specific error rather than a generic failure. Each allocation stores the batch's unit cost at sale time, and COGS and gross margin are derived from that snapshot, so margin reporting stays correct even after a refund.
 
-**Refund** — refunds the exact batch allocations originally recorded on the sale, restoring quantity to those same batches, and clears the sale's COGS snapshot. The sale status becomes `Refunded`. A second refund attempt fails, so stock cannot be credited twice.
+**Refund** — refunds the exact batch allocations originally recorded on the sale, restoring quantity to those same batches, and sets the sale's `refundedAt` timestamp. Because a refunded sale drops out of the `Completed` analytics filter, its revenue and COGS leave the reported totals with it; nothing has to be unwound. The sale status becomes `Refunded`. A second refund attempt fails, so stock cannot be credited twice.
 
 **Inventory adjustment** — increase or decrease a medicine's quantity across a chosen batch with a mandatory reason. The adjustment is stored as its own document and audited, which keeps manual corrections distinguishable from purchases and refunds.
 
@@ -137,39 +140,44 @@ All routes are under `/api`. Full request/response detail is in [`Project/docs/A
 | `GET/POST /medicines`, `GET/PATCH/DELETE /medicines/:id` | Medicine catalogue |
 | `GET/POST /batches`, `GET/PATCH/DELETE /batches/:id` | Batch lots |
 | `GET/POST /suppliers`, `GET/PATCH/DELETE /suppliers/:id` | Suppliers |
-| `GET/POST /purchases`, `GET /purchases/:id` | Purchases |
-| `GET/POST /sales`, `GET /sales/:id`, `POST /sales/:id/refund` | Sales and refunds |
+| `GET/POST /purchases`, `GET /purchases/:id` | Purchases (stock in) |
+| `GET/POST /sales`, `GET /sales/:id`, `POST /sales/:id/refund` | Sales (FEFO stock out) and refunds |
 | `GET/POST /adjustments` | Inventory adjustments |
 | `GET /dashboard`, `GET /analytics` | Dashboard and analytics |
-| `GET /reports` | Report generation |
-| `GET /notifications`, `PATCH /notifications/:id/read` | Alerts and acknowledgement |
+| `GET /reports` | Report generation (`inventory`, `sales`, `purchase`, `expiry`, `low-stock`, `supplier`) |
+| `GET /notifications`, `PATCH /notifications/:id/read` | Shared alert feed and acknowledgement (acknowledge is inventory roles) |
 | `GET /audit-logs`, `GET /audit-logs/actions` | Audit trail (Admin) |
 | `GET/POST /users`, `PATCH /users/:id` | User management (Admin) |
+| `GET /health` | Unauthenticated liveness and replica-set capability probe |
 
 ## Testing strategy
 
 | Layer | Tool | Result |
 |---|---|---|
-| Unit | Node test runner | 25 tests / 25 pass |
-| API contract | Node test runner + supertest-style HTTP | included above |
-| Transaction integration | Node test runner, real replica set | included above, `RUN_TRANSACTION_TESTS=true` |
-| Database verification | `npm run verify-db` | PASS |
-| Browser E2E | `playwright-core`, real Chromium | 23 checks + console-error assertion, 0 failures |
+| Unit | `node --test` (Node built-in) | included in the 25 below |
+| API contract | `node --test` over HTTP against the app | included in the 25 below |
+| Transaction integration | `node --test`, real replica set | included in the 25 below, needs `RUN_TRANSACTION_TESTS=true` |
+| **Backend total** | `node --test` | **25 tests, 25 passed, 0 failed, 0 skipped** |
+| Database verification | `npm run verify-db` | `Database verification: PASS` |
+| Transaction capability probe | `npm run probe:transactions` | `TRANSACTION PROBE: PASS` |
+| **Browser E2E** | `playwright-core`, real Chromium | **24 E2E checks executed (23 named scenario checks + 1 browser-console assertion), 0 failed** |
 | Build | Vite production build | pass |
 | Dependency audit | `npm audit --audit-level=high` | 0 vulnerabilities (backend and frontend) |
 
 ```powershell
 cd Project/backend
+npm ci
 $env:RUN_TRANSACTION_TESTS='true'; $env:SEED_PASSWORD='<local test password>'
 npm test
 npm run verify-db
+npm run probe:transactions
 
 cd ..\frontend
 npm run build
 npm run test:e2e
 ```
 
-The E2E suite starts the API and the Vite dev server itself, refuses to run against a database whose name is not disposable, and on failure writes `test-results/e2e-failure.log` and `test-results/e2e-failure.png`.
+The E2E suite starts the API and the Vite dev server itself, refuses to run against a database whose name is not disposable, and on any failure writes `test-results/e2e-failure.log` plus a screenshot of the failing page.
 
 ## CI/CD
 
@@ -181,7 +189,24 @@ The E2E suite starts the API and the Vite dev server itself, refuses to run agai
 
 JWT secret and seed password are generated per run and registered with GitHub Actions log masking, so no credential is stored in the repository. The workflow token is read-only.
 
-> CI configuration is committed and syntax-checked locally. It has **not** been executed on GitHub Actions yet, so treat the pipeline as unverified until the first green run appears in the Actions tab.
+### Current verified CI state
+
+The pipeline **has** executed on GitHub Actions and the latest run is green.
+
+| | |
+|---|---|
+| Workflow | `PharmaStock CI` |
+| Run | [`36824289337`](https://github.com/karkalashivareddy/DataBase-System-and-Distributed-Backend-Development/actions/runs/36824289337) |
+| Commit | `7e8ffd9` |
+| Conclusion | **success** — backend PASS, frontend PASS, E2E PASS |
+
+History, for context rather than as current status:
+
+- Runs `36818774843` and `36823747950` failed. The first because the E2E job was handed the shared `pharmastock_ci` URI, which the suite's disposable-database guard correctly refused; the second during the corrective pass. Both were workflow/tooling problems, not application defects.
+- The fix was to give the `e2e` job its own `pharmastock_e2e` database rather than weakening the guard.
+- Run `36162711149` predates the CI configuration and passed on a smaller job set; it is not the current pipeline.
+
+The three historical failures are kept here deliberately: they show the disposable-database guard works and that the workflow was corrected rather than the check.
 
 ## Local setup
 
@@ -222,16 +247,22 @@ The dev server proxies `/api` to `http://localhost:5000`; set `VITE_API_URL` to 
 
 ## Environment variables
 
-Backend (`.env`, never commit):
+Backend (`.env`, never commit — every supported variable is annotated in [`Project/backend/.env.example`](Project/backend/.env.example)):
 
 | Variable | Required | Notes |
 |---|---|---|
-| `MONGODB_URI` | yes | Use a replica-set URI, e.g. `mongodb://127.0.0.1:27017/pharma_stock_management?replicaSet=rs0` |
-| `JWT_SECRET` | yes | Random, at least 32 characters |
-| `PORT` | no | Default `5000` |
+| `MONGODB_URI` | yes | Replica-set URI, e.g. `mongodb://127.0.0.1:27017/pharma_stock_management?replicaSet=rs0` |
+| `JWT_SECRET` | yes | Random, at least 32 characters; the API refuses shorter or placeholder values |
 | `CLIENT_ORIGIN` | yes | Comma-separated CORS allowlist |
-| `SEED_CONFIRM` | seed only | Must equal `RESET` |
-| `SEED_PASSWORD` | seed only | No default password exists |
+| `PORT` | no | Default `5000` |
+| `JWT_EXPIRES_IN` | no | Default `8h` |
+| `NODE_ENV` | no | `production` hides 5xx internals from responses |
+| `RATE_LIMIT_MAX` | no | Global requests per IP per 15 min; default `1000` |
+| `LOGIN_RATE_LIMIT_MAX` | no | Failed logins per IP per 15 min; default `10` |
+| `TRUST_PROXY` | no | Off unless set. `true` trusts one hop; a comma-separated list trusts those proxies |
+| `SEED_CONFIRM` | seed only | Must equal `RESET` (or pass `--force`) |
+| `SEED_PASSWORD` | seed only | No default password exists anywhere in the repository |
+| `SEED_DAY`, `SEED_RANDOM_SEED` | no | Anchor the seed's dates and PRNG so a reseed is reproducible |
 
 Frontend:
 
@@ -240,6 +271,8 @@ Frontend:
 | `VITE_API_URL` | API base URL; defaults to the dev proxy |
 
 E2E suite: `E2E_MONGODB_URI`, `E2E_PASSWORD`, and optionally `E2E_API_PORT`, `E2E_WEB_PORT`, `E2E_JWT_SECRET`, `E2E_CHROME_PATH`.
+
+Backend test suite: `RUN_TRANSACTION_TESTS`, and optionally `TEST_ADMIN_EMAIL`, `TEST_ADMIN_PASSWORD`, `TEST_VIEWER_EMAIL` to override which seeded accounts the suites sign in as.
 
 ## Seed instructions
 
@@ -250,13 +283,12 @@ cd Project/backend
 $env:SEED_CONFIRM='RESET'
 $env:SEED_PASSWORD='<local test password>'
 npm run seed -- --force
-$env:VERIFY_SEED_COUNTS='true'
 npm run verify-db
 ```
 
-Seeded data: 7 users, 34 medicines, 6 suppliers, 72 purchases, 72 batches, 101 sales (including 4 refunded), 17 adjustments, 47 notifications, and 101 audit logs. Batch quantities are derived from the purchase/sale/refund/adjustment ledger rather than invented, so the demo database is internally consistent. `verify-db` then checks counts, references, unique indexes, password hashes, allocation arithmetic, and chronology.
+A fresh seed produces exactly: **7 users, 34 medicines, 6 suppliers, 72 batches, 72 purchases, 101 sales (4 refunded), 17 adjustments, 47 notifications, and 101 audit logs.** Batch quantities are derived from the purchase/sale/refund/adjustment ledger rather than invented, so the demo database is internally consistent. `verify-db` then checks counts, references, unique indexes, password hashes, allocation arithmetic, chronology, and — the important one — that every batch's stored quantity reconciles with its ledger.
 
-Those are fresh-seed figures. Notification and audit counts grow as soon as you perform demo transactions, because every sale, refund, adjustment, and acknowledgement is recorded.
+Notification and audit counts grow as soon as you perform demo transactions, because every sale, refund, adjustment, and acknowledgement is recorded.
 
 ## Seeded medicine catalogue
 
@@ -341,7 +373,7 @@ The seed assigns every account the same password, which you choose at seed time 
 | `sateesh@pharmastock.in` | Viewer |
 | `admin@pharmastock.in` | Admin |
 
-Use `karkala@pharmastock.in` for the full demo and `sateesh@pharmastock.in` to demonstrate RBAC restrictions. These are seeded demo accounts in a local database — do not reuse the password anywhere real.
+Use `karkala@pharmastock.in` for the full demo and `sateesh@pharmastock.in` to demonstrate RBAC restrictions. The seed also creates `arjun@pharmastock.in` as an **Inactive** Sales Staff account, so it authenticates as a rejected login — useful for showing the disabled-user path. These are seeded demo accounts in a local database — do not reuse the password anywhere real.
 
 ## Screenshots
 
@@ -380,9 +412,9 @@ All screenshots below are real captures of the running application against a see
 - **JWT in `localStorage`** — vulnerable to XSS; acceptable for a course demo, not for production.
 - **Settings are browser-local** — they do not sync across devices or users.
 - **No refresh tokens** — a session ends when the JWT expires and the user logs in again.
-- **No pagination beyond explicit `page`/`limit`** on list endpoints; the UI pages client-side for some tables.
-- **CSV export is client-side** from already-fetched rows; reports cap at 1000 rows per request.
-- **Realtime updates are absent** — data refreshes on navigation and after mutations, not via websockets.
+- **Pagination is offset-based** — list endpoints take `page`/`limit`; the UI pages some tables client-side.
+- **Report queries cap at 1000 rows** per request, and CSV export is built client-side from those already-fetched rows.
+- **No realtime updates** — data refreshes on navigation and after mutations, not via websockets. The alert badge reloads on navigation for the same reason.
 - **No CI secret storage** — CI generates its JWT secret and seed password per run rather than using repository secrets, so a fork's first run works without configuration.
 - **No automated accessibility scanner** — accessibility was reviewed statically (label/control association, focus order, dialog semantics) rather than with axe or a screen reader.
 
@@ -396,13 +428,14 @@ All screenshots below are real captures of the running application against a see
 - Lot recall and quarantine workflows.
 - Cursor-based pagination for large catalogues.
 - Containerized deployment with a managed replica set and TLS.
+- Replicate the expiry-risk and low-stock alerts to scheduled email digests.
 
 ## Documentation
 
 | Document | Contents |
 |---|---|
 | [Architecture](Project/docs/ARCHITECTURE.md) | Layering, request flow, module responsibilities |
-| [API reference](Project/docs/API.md) | Endpoints, request/response shapes, error codes |
+| [API reference](Project/docs/API.md) | Endpoints, request/response shapes, query parameters, error codes |
 | [Security](Project/docs/SECURITY.md) | Auth, RBAC, validation, known limitations |
 | [Testing](Project/docs/TESTING.md) | Test layers and how to run them |
 | [Database design](Project/docs/DATABASE_DESIGN.md) | Collection design and stock model |
@@ -413,6 +446,7 @@ All screenshots below are real captures of the running application against a see
 | [Final review report](Project/docs/FINAL_REVIEW_REPORT.md) | Evidence-based hardening report |
 | [Final QA evidence](Project/docs/FINAL_REVIEW_QA.md) | Recorded command results |
 | [Demo script](Project/docs/FINAL_DEMO_SCRIPT.md) | Faculty review walkthrough |
+| [Review-3 guide](Project/docs/REVIEW_3_GUIDE.md) | Design rationale and anticipated viva questions |
 ---
 
 **Karkala Shiva Reddy** — [GitHub](https://github.com/karkalashivareddy)

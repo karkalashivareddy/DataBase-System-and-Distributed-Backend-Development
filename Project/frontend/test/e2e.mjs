@@ -56,7 +56,14 @@ function killTree(child) {
 }
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const passedChecks = [];
+// These three live at module scope on purpose. The failure handler below runs
+// outside `main()`, and the most common early failure (the API or the dev server
+// never becoming ready) happens before the browser exists. Declaring them inside
+// `main()` made that handler throw a ReferenceError instead of writing the
+// evidence CI uploads, which is exactly when the evidence matters most.
 let browser;
+let page;
+const consoleErrors = [];
 let failedCheck = "";
 
 function pass(name) {
@@ -165,11 +172,10 @@ async function main() {
   // positive adjustment, which is the other audited way quantity can change.
   await api("/adjustments", { method: "POST", headers: auth(login.token, true), body: JSON.stringify({ medicineId: expiredMedicine.id, batchId: expiredBatch.id, quantityDelta: 500, reason: "E2E expired stock fixture" }) });
 
-  browser = await chromium.launch({ ...(chromePath ? { executablePath: chromePath } : {}), headless: true });
+browser = await chromium.launch({ ...(chromePath ? { executablePath: chromePath } : {}), headless: true });
   const context = await browser.newContext();
-  const page = await context.newPage();
+  page = await context.newPage();
   page.setDefaultTimeout(10000);
-  const consoleErrors = [];
   page.on("pageerror", (error) => consoleErrors.push(error.message));
   page.on("console", (message) => { if (message.type() === "error" && !/status of 409/.test(message.text())) consoleErrors.push(message.text()); });
 
@@ -397,12 +403,12 @@ async function main() {
   await page.getByRole("link", { name: "Reports", exact: true }).click();
   await page.waitForURL("**/reports");
   const reportTypes = [["Sales Report", "sales"], ["Inventory Report", "inventory"], ["Purchase Report", "purchase"], ["Expiry Report", "expiry"], ["Low Stock Report", "low-stock"], ["Supplier Report", "supplier"]];
-  for (const [label] of reportTypes) {
+for (const [label] of reportTypes) {
     await page.getByTestId("report-type").selectOption({ label });
     await page.getByTestId("report-generate").click();
     await page.getByText(`${label} — Preview`, { exact: true }).waitFor();
   }
-await page.getByTestId("report-type").selectOption({ label: "Sales Report" });
+  await page.getByTestId("report-type").selectOption({ label: "Sales Report" });
   await page.getByTestId("report-from").fill(day(-1));
   await page.getByTestId("report-to").fill(day(1));
   // Selecting the type fires an unfiltered request, so the predicate must also
@@ -420,13 +426,32 @@ await page.getByTestId("report-type").selectOption({ label: "Sales Report" });
   pass("Reports");
   pass("Report date filter");
 
-  // ---- Notifications are a shared, role-guarded review queue ---------------
-  const alerts = await api("/notifications?limit=1", { headers: auth(login.token) });
-  assert.ok(alerts.length >= 1);
-  const acknowledged = await api(`/notifications/${alerts[0].id}/read`, { method: "PATCH", headers: auth(login.token) });
-  assert.equal(acknowledged.read, true);
-  assert.equal(acknowledged.acknowledgedByEmail, "admin@pharmastock.in");
-  assert.ok(acknowledged.acknowledgedAt);
+// ---- Notifications are a shared, role-guarded review queue ---------------
+  // Driven through the UI rather than by calling the endpoint directly, so the
+  // panel's "Mark reviewed" control is covered too. The panel and this query
+  // return the same rows in the same order, so the unread alert found here is the
+  // one rendered at the top of the panel.
+  const alerts = await api("/notifications?limit=20", { headers: auth(login.token) });
+  const pending = alerts.find((alert) => !alert.read);
+  assert.ok(pending, "an unreviewed alert is required for the acknowledgement check");
+  await page.getByRole("button", { name: /Notifications/ }).click();
+  const ackButton = page.getByTestId(`acknowledge-${pending.id}`);
+  await ackButton.waitFor();
+  const ackResponse = await waitForApi(page, (response) => response.url().includes(`/api/notifications/${pending.id}/read`) && response.request().method() === "PATCH", () => ackButton.click());
+  assert.equal(ackResponse.data.read, true);
+  assert.equal(ackResponse.data.acknowledgedByEmail, "admin@pharmastock.in");
+  assert.ok(ackResponse.data.acknowledgedAt);
+  // The reviewer is recorded server-side, so the trail is the proof, not the UI.
+  // There is no single-notification read endpoint, so the row is re-read from the
+  // list the panel itself uses.
+  const afterAck = await api("/notifications?limit=20", { headers: auth(login.token) });
+  const reviewed = afterAck.find((alert) => alert.id === pending.id);
+  assert.ok(reviewed, "the acknowledged alert disappeared from the feed");
+  assert.equal(reviewed.read, true);
+  assert.equal(reviewed.acknowledgedByEmail, "admin@pharmastock.in");
+  assert.ok(reviewed.acknowledgedAt);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Close notifications" }).click();
   pass("Notification acknowledgement records the reviewer");
 
   // ---- RBAC ------------------------------------------------------------------
@@ -479,26 +504,30 @@ try {
   console.log("Browser E2E VERIFIED: NO");
   process.exitCode = 1;
   // Write failure evidence so CI can upload a real artifact instead of an
-  // empty directory: a summary log plus a screenshot of the failing page.
+  // empty directory: a summary log plus a screenshot of the failing page. The
+  // whole writer is guarded so a failure while collecting evidence can never
+  // replace the real test failure as the reported cause.
   const resultsDir = resolve(frontendDir, "test-results");
-  mkdirSync(resultsDir, { recursive: true });
-  const report = [
-    "PharmaStock E2E failure report",
-    `when: ${new Date().toISOString()}`,
-    `web: ${webBase}`,
-    `api: ${apiBase}`,
-    "passed checks:",
-    ...passedChecks.map((check) => `  - ${check}`),
-    "failure:",
-    ...failedCheck.split("\n").map((entry) => `  ${entry}`),
-    "console errors:",
-    ...(consoleErrors.length ? consoleErrors.map((entry) => `  ${entry}`) : ["  none"]),
-  ].join("\n");
-  writeFileSync(resolve(resultsDir, "e2e-failure.log"), `${report}\n`);
   try {
-    if (page) await page.screenshot({ path: resolve(resultsDir, "e2e-failure.png"), fullPage: true });
-  } catch {
+    mkdirSync(resultsDir, { recursive: true });
+    const report = [
+      "PharmaStock E2E failure report",
+      `when: ${new Date().toISOString()}`,
+      `web: ${webBase}`,
+      `api: ${apiBase}`,
+      `browser opened: ${browser ? "yes" : "no"}`,
+      "passed checks:",
+      ...passedChecks.map((check) => `  - ${check}`),
+      "failure:",
+      ...failedCheck.split("\n").map((entry) => `  ${entry}`),
+      "console errors:",
+      ...(consoleErrors.length ? consoleErrors.map((entry) => `  ${entry}`) : ["  none"]),
+    ].join("\n");
+    writeFileSync(resolve(resultsDir, "e2e-failure.log"), `${report}\n`);
     // A screenshot is best effort; the log file is the authoritative artifact.
+    if (page) await page.screenshot({ path: resolve(resultsDir, "e2e-failure.png"), fullPage: true });
+  } catch (evidenceError) {
+    console.error(`Could not write failure evidence: ${evidenceError.message}`);
   }
 } finally {
   if (browser) await browser.close();

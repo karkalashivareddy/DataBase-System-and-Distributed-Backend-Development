@@ -20,12 +20,14 @@ The frontend has no fixture data at all. The historical `src/data/` sample modul
 - `src/app.js` configures Helmet, CORS, JSON limits, rate limiting, health status, routes, and normalized errors.
 - `src/server.js` owns process startup, database connection, and graceful shutdown.
 - `src/routes/` defines URL boundaries, role checks, and request validation.
-- `src/controllers/` translates HTTP requests into domain operations.
-- `src/services/transactionService.js` owns atomic purchase, FEFO sale, refund, and inventory-adjustment operations.
+- `src/controllers/` translates HTTP requests into domain operations, and builds the
+  audit document for each mutation.
+- `src/services/transactionService.js` owns atomic purchase, FEFO sale, refund, and
+  inventory-adjustment operations, including their audit writes.
 - `src/services/dashboardService.js` calculates stock, health, trends, and analytics from source collections.
 - `src/models/` defines MongoDB documents, references, indexes, and schema invariants.
 - `src/middleware/auth.js` verifies JWTs against the current active user; role checks are server-side.
-- `src/middleware/audit.js` records actor, action, entity, request IP, and metadata.
+- `src/middleware/audit.js` captures actor, action, entity, IP and user agent into an audit document, either writing it directly or handing it to a transaction.
 
 ## Data ownership
 
@@ -35,16 +37,29 @@ Purchases and sales reference `Medicine`, `Supplier`, `Batch`, and `User` docume
 
 ## Transaction boundary
 
-`recordPurchase`, `recordSale`, `refundSale`, and `adjustInventory` execute inside `session.withTransaction`. Sales:
+`recordPurchase`, `recordSale`, `refundSale`, and `adjustInventory` execute inside
+`session.withTransaction`. A sale:
 
-1. Lock the medicine context in a MongoDB transaction.
-2. Select positive, unexpired batches sorted by `expiryDate`, `createdAt`, and `_id`.
-3. Decrement each batch with a guarded quantity predicate.
-4. Write the sale and allocation snapshot.
-5. Create the transaction notification.
-6. Commit all changes together.
+1. Opens a transaction and loads the medicine.
+2. Selects positive, unexpired batches sorted by `expiryDate`, `createdAt`, then `_id`.
+3. Decrements each batch with a guarded quantity predicate (`quantity: { $gte: take }`),
+   so a concurrent writer that already took the units causes a clean `409` rather
+   than a negative balance.
+4. Writes the sale and its allocation snapshot.
+5. Creates the transaction notification.
+6. Writes the audit row **on the same session**.
+7. Commits all changes together.
 
-A standalone MongoDB server cannot provide this guarantee. The API intentionally returns `503 TRANSACTIONS_REQUIRED` rather than falling back to non-atomic writes.
+Step 6 is what makes the audit trail trustworthy: the audit entry and the stock
+movement share one commit, so a committed quantity can never be missing from the
+trail and a rolled-back movement never leaves an entry claiming it happened.
+Catalog and administration writes are not transactional and audit immediately
+after their own write.
+
+A standalone MongoDB server cannot provide this guarantee. The API intentionally
+returns `503 TRANSACTIONS_REQUIRED` rather than falling back to non-atomic writes,
+and `npm run probe:transactions` verifies the capability directly instead of
+inferring it from the connection string.
 
 ## Frontend state
 

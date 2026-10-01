@@ -59,6 +59,7 @@ See the root [`README.md`](../README.md) for local setup. API details are in [`d
 - [Database schema](docs/DATABASE_SCHEMA.md)
 - [Database setup](docs/DATABASE_SETUP.md)
 - [Abstract](docs/ABSTRACT.md)
+- [Review-3 guide](docs/REVIEW_3_GUIDE.md)
 - [Final review report](docs/FINAL_REVIEW_REPORT.md)
 - [Final QA evidence](docs/FINAL_REVIEW_QA.md)
 - [Final demo script](docs/FINAL_DEMO_SCRIPT.md)

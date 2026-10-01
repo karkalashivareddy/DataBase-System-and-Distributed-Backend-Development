@@ -43,16 +43,6 @@ const COLLECTIONS = [
   "auditlogs",
 ];
 
-const EXPECTED_COUNTS = {
-  users: 7,
-  medicines: 34,
-  suppliers: 6,
-  batches: 0, // derived
-  purchases: 0,
-  sales: 0,
-  inventoryAdjustments: 0,
-};
-
 // Deterministic PRNG so a reseed produces the same demo dataset and reviewers can
 // reproduce any reported number.
 function makeRandom(seed) {
@@ -239,15 +229,15 @@ async function seedCore() {
       });
     });
   });
-const batches = await Batch.insertMany(batchPlans);
-const batchById = new Map(batches.map((batch) => [String(batch._id), batch]));
-const supplierById = new Map(suppliers.map((supplier) => [String(supplier._id), supplier]));
-const userById = new Map(users.map((user) => [String(user._id), user]));
+  const batches = await Batch.insertMany(batchPlans);
+  const batchById = new Map(batches.map((batch) => [String(batch._id), batch]));
+  const supplierById = new Map(suppliers.map((supplier) => [String(supplier._id), supplier]));
+  const userById = new Map(users.map((user) => [String(user._id), user]));
   console.log(`Batches: ${batches.length} inserted (all created at quantity 0)`);
 
   // Mutable running state, mirroring what the API would hold in a session.
   const purchaseDocs = [];
-const purchaseDateByBatchId = new Map();
+  const purchaseDateByBatchId = new Map();
   const saleDocs = [];
   const adjustmentDocs = [];
   const notificationDocs = [];
@@ -331,7 +321,7 @@ const purchaseDateByBatchId = new Map();
       remaining -= take;
     }
     if (!allocations.length || remaining > 0) continue;
-// The sale date is chosen AFTER allocation, and never earlier than the LAST
+    // The sale date is chosen AFTER allocation, and never earlier than the LAST
     // purchase that supplied the allocated stock. Random date ranges alone
     // produced sales dated before the batch existed, which the ledger verifier
     // now rejects. The accumulator starts far in the past so the first allocation

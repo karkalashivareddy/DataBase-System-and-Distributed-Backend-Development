@@ -110,8 +110,8 @@ async function verify() {
   if (allOk) pass(`${purchases.length} purchases contain required fields and valid references`);
 
   // Batch id -> the date its stock was first received, used for sale causality.
-const purchaseDateByBatch = new Map(purchases.map((purchase) => [idOf(purchase.batch), new Date(purchase.date)]));
-if (!hasRequiredFields(sales, REQUIRED_FIELDS.sales)) fail("sales contain missing required fields");
+  const purchaseDateByBatch = new Map(purchases.map((purchase) => [idOf(purchase.batch), new Date(purchase.date)]));
+  if (!hasRequiredFields(sales, REQUIRED_FIELDS.sales)) fail("sales contain missing required fields");
   for (const sale of sales) {
     if (!ids.medicines.has(idOf(sale.medicine))) fail(`sale ${sale.saleNo} has an orphan medicine reference`);
     if (!ids.batches.has(idOf(sale.batch))) fail(`sale ${sale.batch && idOf(sale.batch)} has an orphan batch reference`);

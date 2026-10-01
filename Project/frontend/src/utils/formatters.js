@@ -1,5 +1,3 @@
-export const INDIAN_LAKH = 100000;
-
 export function formatINR(value) {
   if (value == null || Number.isNaN(Number(value))) return "₹0";
   const num = Number(value);
@@ -32,13 +30,6 @@ export function formatDate(iso) {
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export function formatDateShort(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
-}
-
 // Expiry counting is anchored to the current UTC day, matching the backend's
 // Batch.status and expiry-risk calculations. Using local midnight here would
 // make a batch look one day closer to expiry than the server reports for anyone
@@ -58,13 +49,4 @@ export function daysUntil(iso) {
 
 export function todayISO() {
   return new Date().toISOString().slice(0, 10);
-}
-
-// Date arithmetic runs in UTC so a value produced here matches the date the
-// backend stores for the same logical day.
-export function addDaysISO(iso, days) {
-  const date = new Date(`${iso}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return iso;
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
 }

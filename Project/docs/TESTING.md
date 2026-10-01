@@ -39,15 +39,27 @@ back its own data.
 ## Database verification
 
 ```powershell
-$env:VERIFY_SEED_COUNTS='true'
 npm run verify-db
 ```
 
 `verifyDb` checks collection counts, required fields, bcrypt hashes, referential
 integrity, sale allocation arithmetic (allocated quantity equals sold quantity,
 and refunded allocations are restored exactly once), purchase/sale/refund
-chronology, and the required indexes — including unique `batchNo` and the
-compound batch medicine/expiry/quantity index.
+chronology, the ledger reconciliation invariant, and the required indexes —
+including unique `batchNo`, unique `saleNo`, and the compound batch
+medicine/expiry/quantity index. It calls `syncIndexes()` first, so an index that
+is no longer declared in a schema cannot silently survive and skew a query plan.
+
+## Transaction capability probe
+
+```powershell
+npm run probe:transactions
+```
+
+Reports the deployment's replica-set name, whether it has a writable primary, and
+then actually commits a throwaway document inside `session.withTransaction`.
+This answers "can this database run stock transactions?" directly instead of
+inferring it from the connection string. Exits non-zero on failure.
 
 ## Frontend
 
@@ -82,16 +94,20 @@ assertions are already scoped to the entities the suite created.
 
 Optional: `E2E_API_PORT`, `E2E_WEB_PORT`, `E2E_JWT_SECRET`, `E2E_CHROME_PATH`.
 
-The suite covers login and logout, the dashboard, catalogue CRUD, batch creation,
-purchase with partial payment, FEFO sale allocation, insufficient-stock and
-expired-batch rejection, refunds, duplicate-refund rejection, inventory
-adjustments, audit filtering, analytics, report generation with date filtering
-and CSV export, notification acknowledgement, and role-based access control
-(Viewer is blocked from purchases, adjustments, acknowledgements, and the audit
-log). It finishes by asserting that **no browser console errors** occurred.
+The suite covers login and logout, the dashboard, catalogue and medicine detail,
+supplier dialog, batch creation and batch-immutability, purchase with partial
+payment (server- and client-side validation), FEFO sale allocation across
+multiple batches, insufficient-stock and expired-batch rejection, refunds,
+duplicate-refund rejection, inventory adjustments, audit filtering, analytics
+across five date ranges, all six report types, report date filtering, CSV export,
+notification acknowledgement **driven through the UI**, and role-based access
+control (a Viewer is blocked from purchases, adjustments, acknowledgements, and
+the audit log). It finishes by asserting that **no browser console errors**
+occurred.
 
-On failure it writes `test-results/e2e-failure.log` and
-`test-results/e2e-failure.png`, which CI uploads as an artifact.
+On failure — including a failure before the browser launches — it writes
+`test-results/e2e-failure.log` and, when a page was open, a screenshot, which CI
+uploads as an artifact.
 
 The runner starts the API and the Vite dev server itself and tears down the
 **whole process group** when finished (`taskkill /T /F` on Windows, negated
@@ -116,15 +132,27 @@ CI runs the same command and fails on high or critical findings.
 
 ## Current verified results
 
-Recorded on the final review pass. See
-[`FINAL_REVIEW_QA.md`](FINAL_REVIEW_QA.md) for the full evidence log.
+Every number below is copied from real command output on this commit.
 
-| Gate | Result |
-|---|---|
-| `npm test` with `RUN_TRANSACTION_TESTS=true` | 25 tests, 25 passed, 0 failed |
-| `npm run verify-db` | `Database verification: PASS` |
-| `npm run build` (frontend) | pass |
-| `npm run test:e2e` | 23 checks passed, 0 failed, plus the console-error assertion |
-| `npm audit --audit-level=high` (backend) | 0 vulnerabilities |
-| `npm audit --audit-level=high` (frontend) | 0 vulnerabilities |
-| CI workflow on GitHub Actions | `backend` and `frontend` jobs pass; the `e2e` job failed because the workflow seeded `pharmastock_ci` while the suite refuses any database name without `e2e`/`test`. Fixed by giving the `e2e` job its own disposable `pharmastock_e2e` URI. |
+| Gate | Command | Result |
+|---|---|---|
+| Backend suite | `npm test` with `RUN_TRANSACTION_TESTS=true` | `tests 25 / pass 25 / fail 0 / skipped 0` |
+| Database verification | `npm run verify-db` | `Database verification: PASS` |
+| Transaction probe | `npm run probe:transactions` | `TRANSACTION PROBE: PASS` |
+| Frontend build | `npm run build` | pass |
+| Browser E2E | `npm run test:e2e` | `TOTAL TESTS 24 / PASSED 23 / FAILED 0` |
+| Dependency audit | `npm audit --audit-level=high` (backend) | `found 0 vulnerabilities` |
+| Dependency audit | `npm audit --audit-level=high` (frontend) | `found 0 vulnerabilities` |
+| CI | GitHub Actions `PharmaStock CI` | **success** — run [`36824289337`](https://github.com/karkalashivareddy/DataBase-System-and-Distributed-Backend-Development/actions/runs/36824289337) on commit `7e8ffd9`, all three jobs green |
+
+**Canonical E2E wording.** The runner prints `TOTAL TESTS 24`, `PASSED 23`,
+`FAILED 0`. It reports 23 named scenario checks plus one final assertion that the
+browser console recorded no errors, so the total is 24. Every document uses:
+**"24 E2E checks executed (23 named scenario checks + 1 browser-console
+assertion), 0 failed."**
+
+Earlier CI runs `36818774843` and `36823747950` failed. The first because the E2E
+job was handed the shared `pharmastock_ci` URI and the suite's disposable-database
+guard refused it; the second during the corrective pass. The guard was kept
+strict and the workflow was given its own `pharmastock_e2e` database instead.
+Full evidence log: [`FINAL_REVIEW_QA.md`](FINAL_REVIEW_QA.md).

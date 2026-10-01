@@ -3,7 +3,7 @@ import Medicine from "../models/Medicine.js";
 import Supplier from "../models/Supplier.js";
 import Sale from "../models/Sale.js";
 import InventoryAdjustment from "../models/InventoryAdjustment.js";
-import { recordAudit } from "../middleware/audit.js";
+import { auditDocument } from "../middleware/audit.js";
 import { adjustInventory, recordPurchase, recordSale, refundSale } from "../services/transactionService.js";
 import { dateRangeFilter } from "../utils/dates.js";
 import { notFound } from "../utils/errors.js";
@@ -50,9 +50,19 @@ export async function getPurchase(req, res) {
   return ok(res, serializePurchase(row));
 }
 
+// The four stock mutations below hand the service a builder instead of writing
+// the audit row here. `auditDocument` captures the actor, IP and user agent from
+// the request up front; the service calls the builder with the document the
+// transaction just wrote and inserts the row on the same session, so the audit
+// entry and the stock movement share one commit. Writing it after the transaction
+// returned left a window in which stock had moved and the trail did not yet say so.
 export async function createPurchase(req, res) {
-  const row = await recordPurchase(req.body, req.user._id);
-  await recordAudit(req, { action: "PURCHASE_CREATE", entityType: "Purchase", entityId: row._id, metadata: { purchaseNo: row.purchaseNo, quantity: row.quantity, total: row.total } });
+  const row = await recordPurchase(req.body, req.user._id, (purchase) => auditDocument(req, {
+    action: "PURCHASE_CREATE",
+    entityType: "Purchase",
+    entityId: purchase._id,
+    metadata: { purchaseNo: purchase.purchaseNo, quantity: purchase.quantity, total: purchase.total },
+  }));
   const populated = await Purchase.findById(row._id).populate("supplier", "name").populate("medicine", "name").populate("batch", "batchNo");
   return created(res, serializePurchase(populated));
 }
@@ -85,28 +95,35 @@ export async function getSale(req, res) {
 }
 
 export async function createSale(req, res) {
-  const row = await recordSale(req.body, req.user._id);
-  await recordAudit(req, { action: "SALE_CREATE", entityType: "Sale", entityId: row._id, metadata: { saleNo: row.saleNo, quantity: row.quantity, total: row.total } });
+  const row = await recordSale(req.body, req.user._id, (sale) => auditDocument(req, {
+    action: "SALE_CREATE",
+    entityType: "Sale",
+    entityId: sale._id,
+    metadata: { saleNo: sale.saleNo, quantity: sale.quantity, total: sale.total },
+  }));
   const populated = await Sale.findById(row._id).populate("medicine", "name").populate("batch", "batchNo");
   return created(res, serializeSale(populated));
 }
 
 export async function refundSaleController(req, res) {
   const reason = optionalString(req.body.reason, "reason", { max: 240 });
-  const row = await refundSale(req.params.id, req.user._id);
-  const populated = await Sale.findById(row._id).populate("medicine", "name").populate("batch", "batchNo").populate("createdBy", "name role");
-  await recordAudit(req, {
+  const row = await refundSale(req.params.id, req.user._id, (sale) => auditDocument(req, {
     action: "SALE_REFUND",
     entityType: "Sale",
-    entityId: row._id,
-    metadata: { saleNo: row.saleNo, quantity: row.quantity, reason: reason || "" },
-  });
+    entityId: sale._id,
+    metadata: { saleNo: sale.saleNo, quantity: sale.quantity, reason: reason || "" },
+  }));
+  const populated = await Sale.findById(row._id).populate("medicine", "name").populate("batch", "batchNo").populate("createdBy", "name role");
   return ok(res, serializeSale(populated));
 }
 
 export async function adjustInventoryController(req, res) {
-  const row = await adjustInventory(req.body, req.user._id);
-  await recordAudit(req, { action: "INVENTORY_ADJUSTMENT", entityType: "InventoryAdjustment", entityId: row._id, metadata: { quantityDelta: row.quantityDelta, reason: row.reason } });
+  const row = await adjustInventory(req.body, req.user._id, (adjustment) => auditDocument(req, {
+    action: "INVENTORY_ADJUSTMENT",
+    entityType: "InventoryAdjustment",
+    entityId: adjustment._id,
+    metadata: { quantityDelta: adjustment.quantityDelta, reason: adjustment.reason },
+  }));
   const populated = await InventoryAdjustment.findById(row._id).populate("medicine", "name").populate("batch", "batchNo").populate("createdBy", "name role");
   return created(res, serializeAdjustment(populated));
 }

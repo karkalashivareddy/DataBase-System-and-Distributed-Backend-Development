@@ -62,22 +62,6 @@ export function getDashboardData() {
   return request("/dashboard");
 }
 
-export function getDashboardStats() {
-  return getDashboardData().then((data) => data.kpis);
-}
-
-export function getDashboardSales() {
-  return getDashboardData().then((data) => data.salesTrend);
-}
-
-export function getInventoryHealth() {
-  return getDashboardData().then((data) => data.stockHealth);
-}
-
-export function getExpirySummary() {
-  return getDashboardData().then((data) => data.expiryTimeline);
-}
-
 export function getAnalytics({ from, to } = {}) {
   return request(`/analytics${queryString({ from, to })}`);
 }
@@ -106,10 +90,6 @@ export function getBatches(params) {
   return request(`/batches${queryString(params)}`);
 }
 
-export function getBatchById(id) {
-  return request(`/batches/${encodeURIComponent(id)}`);
-}
-
 export function getBatchesByMedicine(medicineId) {
   return getBatches({ medicineId, limit: 100 });
 }
@@ -118,20 +98,8 @@ export function createBatch(data) {
   return request("/batches", { method: "POST", body: JSON.stringify(data) });
 }
 
-export function updateBatch(id, data) {
-  return request(`/batches/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(data) });
-}
-
-export function deleteBatch(id) {
-  return request(`/batches/${encodeURIComponent(id)}`, { method: "DELETE" });
-}
-
 export function getSuppliers(params) {
   return request(`/suppliers${queryString(params)}`);
-}
-
-export function getSupplierById(id) {
-  return request(`/suppliers/${encodeURIComponent(id)}`);
 }
 
 export function createSupplier(data) {
@@ -150,20 +118,12 @@ export function getPurchases(params) {
   return request(`/purchases${queryString(params)}`);
 }
 
-export function getPurchaseById(id) {
-  return request(`/purchases/${encodeURIComponent(id)}`);
-}
-
 export function createPurchase(data) {
   return request("/purchases", { method: "POST", body: JSON.stringify(data) });
 }
 
 export function getSales(params) {
   return request(`/sales${queryString(params)}`);
-}
-
-export function getSaleById(id) {
-  return request(`/sales/${encodeURIComponent(id)}`);
 }
 
 export function createSale(data) {
@@ -181,10 +141,6 @@ export function getUsers() {
   return request("/users");
 }
 
-export function getUserById(id) {
-  return getUsers().then((users) => users.find((user) => user.id === id) || null);
-}
-
 export function createUser(data) {
   return request("/users", { method: "POST", body: JSON.stringify(data) });
 }
@@ -194,16 +150,13 @@ export function updateUser(id, data) {
 }
 
 // Returns the page metadata as well as the rows, because the unread count is a
-    // server-side total and cannot be derived from the current page of results.
+// server-side total and cannot be derived from the current page of results.
 export async function getNotificationsPage(params) {
   const response = await requestWithMeta(`/notifications${queryString(params)}`);
   return { rows: response.data || [], meta: response.meta || {} };
 }
 
-export function getNotifications(params) {
-  return request(`/notifications${queryString(params)}`);
-}
-
+// Acknowledgement is a state change, so the API restricts it to inventory roles.
 export function markNotificationRead(id) {
   return request(`/notifications/${encodeURIComponent(id)}/read`, { method: "PATCH" });
 }
@@ -216,18 +169,9 @@ export function getReport(type, params) {
   return request(`/reports${queryString({ type, ...params })}`);
 }
 
-export function getAuditLogs(params) {
-  return request(`/audit-logs${queryString(params)}`);
-}
-
-// Paginated screens need the server's `meta.totalPages` to render the pager.
-// `request` discards meta, so the paged variant is exposed separately.
+// Audit logs are paginated server-side, so the pager needs meta as well as rows.
 export function getAuditLogsPage(params) {
   return requestWithMeta(`/audit-logs${queryString(params)}`);
-}
-
-export function getAdjustmentsPage(params) {
-  return requestWithMeta(`/adjustments${queryString(params)}`);
 }
 
 export function getAuditLogActions() {

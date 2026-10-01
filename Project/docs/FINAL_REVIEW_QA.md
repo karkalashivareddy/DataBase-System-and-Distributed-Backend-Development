@@ -33,12 +33,20 @@ rejection, adjustment, rollback).
 ## 2. Database verification
 
 ```powershell
-$env:VERIFY_SEED_COUNTS="true"
 npm run verify-db
 ```
 
 ```text
-OK: auditLogs: 6 secondary index(es) present
+OK: 7 users contain required fields and bcrypt hashes
+OK: 34 medicines contain required fields
+OK: 6 suppliers contain required fields
+OK: 72 batches contain required fields and valid references
+OK: 72 purchases contain required fields and valid references
+OK: 101 sales contain required fields and valid references
+OK: 17 inventory adjustments contain valid references
+OK: every batch quantity reconciles with the purchase/sale/refund/adjustment ledger
+OK: no expired batch still holds stock
+OK: 4 refunded sale(s) present, so the refund ledger is exercised
 OK: batch medicine/expiry/quantity compound index exists
 OK: batch batchNo unique index exists
 OK: sale saleNo unique index exists
@@ -51,7 +59,7 @@ Live collection counts:
 ```text
 User 7, Medicine 34, Supplier 6, Batch 72, Purchase 72,
 Sale 101 (Refunded 4), InventoryAdjustment 17,
-Notification 67, AuditLog 137, Medicine categories 10
+Notification 47, AuditLog 101, Medicine categories 10
 ```
 
 ## 3. Seed verification
@@ -64,15 +72,29 @@ npm run seed -- --force
 ```
 
 ```text
+  batches             72
+  purchases           72
+  sales               101
+  inventoryAdjustments 17
   notifications       47
   auditLogs           101
 Batch quantities are derived from the purchase/sale/refund/adjustment ledger.
 ```
 
-A fresh seed produces 7 users, 34 medicines, 6 suppliers, 72 purchases, 72
-batches, 101 sales (4 refunded), 17 adjustments, 47 notifications, 101 audit
+A fresh seed produces 7 users, 34 medicines, 6 suppliers, 72 batches, 72
+purchases, 101 sales (4 refunded), 17 adjustments, 47 notifications, and 101 audit
 logs. Demo activity after seeding grows the notification and audit counts, which
 is expected.
+
+## 3a. Transaction capability probe
+
+```powershell
+npm run probe:transactions
+```
+
+```text
+TRANSACTION PROBE: PASS
+```
 
 ## 4. Frontend production build
 
@@ -103,7 +125,10 @@ FAILED 0
 Browser E2E VERIFIED: YES
 ```
 
-The final assertion verifies zero browser console errors.
+The final assertion verifies zero browser console errors, which is why the runner
+reports 24 total checks while naming 23. Every document uses the canonical
+wording: **"24 E2E checks executed (23 named scenario checks + 1 browser-console
+assertion), 0 failed."**
 
 ## 6. Dependency audits
 
@@ -121,11 +146,12 @@ found 0 vulnerabilities
 
 | Check | Command | Result |
 |---|---|---|
-| Backend syntax | `node --check` over `src/` and `test/` | 34 files, **0 failures** |
+| Backend syntax | `node --check` over `src/` and `test/` | 42 files, **0 failures** |
 | Whitespace | `git diff --check` | no errors (LF→CRLF notices only) |
 | Secrets | regex scan of tracked files for Atlas URIs, literal passwords, literal JWT secrets | **no matches** |
 | `.env` tracked | `git ls-files` | **not tracked** (gitignored) |
 | Coursework | `git status --porcelain -- Practicals` | **empty (untouched)** |
+| Documentation links | relative Markdown links vs filesystem | **0 broken** |
 
 ## 8. CI configuration
 
@@ -145,13 +171,27 @@ npx --no-install playwright-core --version
 Version 1.63.0
 ```
 
-**CI run 1 (initial release commit): `backend` PASS, `frontend` PASS, `e2e` FAIL.**
+**CI run 1 (`36818774843`): `backend` PASS, `frontend` PASS, `e2e` FAIL.**
 The E2E job failed before any browser test with
 `E2E_MONGODB_URI must point at a disposable database (name containing e2e or test)`.
 The workflow had passed the seeded URI `pharmastock_ci` to the E2E job; the guard in
 `Project/frontend/test/e2e.mjs` correctly rejected it, and the guard was not weakened.
-Root cause is workflow configuration only, now corrected so the `e2e` job seeds
-`pharmastock_e2e`. The corrected run is verified in the corrective commit recorded in git history.
+Root cause was workflow configuration only, corrected so the `e2e` job seeds
+`pharmastock_e2e`.
+
+**CI run 2 (`36823747950`): failed during the corrective pass.**
+
+**CI run 3 (`36824289337`, commit `7e8ffd9`): success.**
+
+```text
+PharmaStock CI — completed / success
+  backend  PASS
+  frontend PASS
+  e2e       PASS
+  Duration  1m53s
+```
+
+This is the current verified state. Re-run the workflow to reproduce it.
 
 ## 9. Accessibility review (static)
 
@@ -183,17 +223,21 @@ verification, so this is a static best-effort pass, not a WCAG conformance claim
 | 3 | Batch creation submitted quantity/cost that the backend forbids | Form fields contradicted `BATCH_STOCK_IMMUTABLE` | Form now sends descriptive fields only and explains the purchase-based stock rule |
 | 4 | `Adjustments`/`AuditLog` referenced a missing `actions` prop | Build-level component contract | Same as #2 |
 | 5 | Supplier edit form markup was corrupted by a scripted replace | Literal `<INPUT id="{...` text visible in source | Rewrote the four field lines by hand and re-verified the build |
+| 6 | Audit rows for purchases, sales, refunds and adjustments were written after the transaction committed | Controller called `recordAudit` on a separate connection once `withTransaction` had already returned | The service now inserts the audit row on the same session as the last write in the transaction, so the trail cannot lag the stock movement |
+| 7 | On a failure before the browser launched, the E2E failure-evidence writer threw `ReferenceError` | `page` and `consoleErrors` were declared inside `main()` but referenced in the module-level `catch`; reproduced with a deliberate failure | Both hoisted to module scope, the writer wrapped so it cannot mask the real error, and the log now records whether the browser opened |
+| 8 | The notification alert list was fetched once on mount, so the badge and panel went stale after a purchase, sale, refund or adjustment performed in the same session | E2E could not find the newest unreviewed alert in the panel | The loader is now shared and re-run on every navigation, matching the documented refresh behaviour; acknowledgement is covered through the UI |
 
 ## 11. Release gate summary
 
 | Gate | Result |
 |---|---|
-| Backend tests (incl. transaction, FEFO, refund, RBAC) | PASS |
+| Backend tests (incl. transaction, FEFO, refund, RBAC) | PASS — `tests 25 / pass 25 / fail 0 / skipped 0` |
 | Frontend build | PASS |
-| Browser E2E | PASS |
-| Backend syntax validation | PASS |
+| Browser E2E | PASS — 24 E2E checks executed (23 named + 1 console assertion), 0 failed |
+| Backend syntax validation | PASS — 42 files |
 | Database verification | PASS |
 | Seed verification | PASS |
+| Transaction capability probe | PASS |
 | Dependency audits (backend + frontend) | PASS |
 | Secret scan | PASS |
 | Whitespace check | PASS |
@@ -201,4 +245,4 @@ verification, so this is a static best-effort pass, not a WCAG conformance claim
 | Documentation consistency | PASS |
 | Coursework protection | PASS |
 | Accessibility | PARTIAL (static pass, no scanner) |
-| CI on GitHub Actions | run 1: backend PASS, frontend PASS, e2e FAIL (disposable-database guard tripped by workflow config); fixed in the corrective commit |
+| CI on GitHub Actions | PASS — run `36824289337` on `7e8ffd9`, all three jobs green |

@@ -111,9 +111,10 @@ Invoke-RestMethod -Uri http://localhost:5000/api/batches/<batchId> -Method Patch
 
 Show the resulting purchase row with the **Paid** and **Outstanding** columns.
 
-> **Say:** The purchase runs inside a MongoDB transaction. It creates or tops up
-> batches, and outstanding payment is derived server-side as
-> `total - paidAmount` — never trusted from the client.
+> **Say:** The purchase runs inside a MongoDB transaction. It tops up the batch you
+> selected — a purchase always targets a batch that already exists — and re-averages
+> that batch's unit cost across every purchase received into it. Outstanding payment
+> is derived server-side as `total - paidAmount`, never trusted from the client.
 
 Verify in the terminal:
 
@@ -133,8 +134,10 @@ mandatory reason such as "damage in transit". Submit.
 > purchase. That keeps manual corrections distinguishable from real stock
 > movements, and every one is audited.
 
-Confirm the audit trail entry at `/audit-log` — action `INVENTMENT_ADJUSTMENT`,
-with your name as the actor.
+Confirm the audit trail entry at `/audit-log` — action `INVENTORY_ADJUSTMENT`,
+with your name as the actor. Note that the entry is written **inside** the same
+transaction as the batch change, so it cannot exist without the adjustment, and
+an adjustment that rolls back leaves no trail entry behind.
 
 ## 7. FEFO sale — the centrepiece
 
@@ -168,14 +171,19 @@ Return to `/low-stock`.
 
 ## 9. Notifications and acknowledgement
 
-The bell icon in the top bar shows the unread count from `GET /api/notifications`
-(`meta.unread`, not the page length — a deliberate fix so the badge can't lie).
+The bell icon in the top bar shows the unreviewed count from
+`GET /api/notifications` (`meta.unread`, not the page length — a deliberate fix so
+the badge can't lie). It reloads on every navigation, so the count reflects the
+adjustment you just made.
 
-Acknowledge an alert from the panel.
+Open the panel and click **Mark reviewed** on an alert. The button is only offered
+to Admin, Inventory Manager and Pharmacist, mirroring the API's rule for
+`PATCH /api/notifications/:id/read`.
 
 > **Say:** Because the alert feed is shared, acknowledgement records **who**
 > reviewed it — `acknowledgedBy`, `acknowledgedByEmail`, `acknowledgedAt` — rather
-> than flipping an anonymous flag nobody can be shown to own.
+> than flipping an anonymous flag nobody can be shown to own. The row then shows
+> "reviewed by <your email>". The browser E2E suite drives this exact button.
 
 Verify:
 
@@ -195,8 +203,10 @@ Show the batch quantities returning to their pre-sale values — including the
 partially consumed batch.
 
 > **Say:** The refund restores the *exact* allocations recorded on the original
-> sale, not "some quantity from some batch". The sale's COGS snapshot is cleared
-> so margin reporting stays correct.
+> sale, not "some quantity from some batch". The sale becomes `Refunded` and is
+> stamped with a timestamp. Because analytics only counts `Completed` sales, its
+> revenue and COGS drop out of the reported totals with it — there is no snapshot to
+> unwind and no way for margin reporting to double-count refunded stock.
 
 Now try to refund it a second time.
 
@@ -238,10 +248,17 @@ Show that the Purchases, Adjustments, Users, and Audit Log entries are not
 available. Try the API directly to prove the restriction is server-side:
 
 ```powershell
+# $headers must carry the VIEWER's token, not the Admin's.
 Invoke-RestMethod -Uri http://localhost:5000/api/purchases -Method Post `
-  -Headers $headers -ContentType "application/json" -Body '{"supplier":"...","items":[]}'
-# => 403 FORBIDDEN — the button being hidden is a convenience, not the boundary
+  -Headers $headers -ContentType "application/json" `
+  -Body '{"medicineId":"<id>","supplierId":"<id>","batchId":"<id>","quantity":1}'
+# => 403 FORBIDDEN — the hidden button is a convenience, not the boundary
 ```
+
+Point out that authorization is checked before validation, so a Viewer gets `403`
+rather than a validation error that would reveal anything about the payload.
+Also note that the alert panel shows no **Mark reviewed** button to a Viewer,
+while the API still refuses the call directly.
 
 ## 14. Transaction and rollback demonstration
 
@@ -283,13 +300,17 @@ Then present the verification evidence:
 
 ```powershell
 cd Project/backend
-npm test                                   # 25 tests, 25 pass
-npm run verify-db                          # Database verification: PASS
+npm test                          # tests 25 / pass 25 / fail 0 / skipped 0
+npm run verify-db                 # Database verification: PASS
+npm run probe:transactions        # TRANSACTION PROBE: PASS
 cd ..\frontend
-npm run build                             # production build
-npm run test:e2e                          # 23 browser checks, 0 failures
-npm audit --audit-level=high               # 0 vulnerabilities
+npm run build                     # production build
+npm run test:e2e                  # TOTAL TESTS 24 / PASSED 23 / FAILED 0
+npm audit --audit-level=high      # 0 vulnerabilities
 ```
+
+The browser suite reports 24 checks because it names 23 scenarios and adds one
+final assertion that the console recorded no errors.
 
 Full evidence is in [`FINAL_REVIEW_QA.md`](FINAL_REVIEW_QA.md) and the hardening
 narrative is in [`FINAL_REVIEW_REPORT.md`](FINAL_REVIEW_REPORT.md).
@@ -297,11 +318,15 @@ narrative is in [`FINAL_REVIEW_REPORT.md`](FINAL_REVIEW_REPORT.md).
 ### Honest limitations to state if asked
 
 - The JWT lives in `localStorage`, so an XSS flaw would leak the session. A
-  production build should use an `HttpOnly`, `Secure` cookie.
+  production build should use an `HttpOnly`, `Secure` cookie (which then needs
+  CSRF protection too).
 - Settings are per-browser, not per-user.
-- CI is configured but has not yet run on GitHub Actions.
-- Accessibility was reviewed statically; no axe or screen-reader pass was run.
+- CI runs on every push. The latest run (`36824289337`, commit `7e8ffd9`) passed all
+  three jobs; two earlier runs failed and were corrected rather than papered over.
+- Accessibility was reviewed statically; no axe or screen-reader pass was run, and
+  no penetration test or security scanner has been run at all.
 - Reports cap at 1000 rows per request and CSV export is client-side.
+- There is no deployed instance, so nothing here is a production-readiness claim.
 
 ## Timing guide
 

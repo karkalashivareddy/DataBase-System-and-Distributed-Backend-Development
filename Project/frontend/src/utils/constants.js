@@ -14,32 +14,7 @@ export const MEDICINE_CATEGORIES = [
 
 export const ROLES = ["Admin", "Inventory Manager", "Pharmacist", "Sales Staff", "Viewer"];
 
-export const USERS_ROLE_DEFAULT = "Admin";
-
-export const STOCK_STATUS = {
-  HEALTHY: "Healthy",
-  LOW: "Low Stock",
-  CRITICAL: "Critical",
-  OUT: "Out of Stock",
-};
-
-export const BATCH_STATUS = {
-  ACTIVE: "Active",
-  LOW: "Low Stock",
-  NEAR_EXPIRY: "Near Expiry",
-  EXPIRED: "Expired",
-  DEPLETED: "Depleted",
-};
-
 export const PAYMENT_STATUS = ["Paid", "Pending", "Partially Paid"];
-
-export const EXPIRY_BUCKETS = [
-  { key: "expired", label: "Expired", max: null },
-  { key: "within7", label: "Within 7 days", max: 7 },
-  { key: "within15", label: "Within 15 days", max: 15 },
-  { key: "within30", label: "Within 30 days", max: 30 },
-  { key: "within60", label: "Within 60 days", max: 60 },
-];
 
 export const REPORT_TYPES = {
   INVENTORY: "Inventory Report",

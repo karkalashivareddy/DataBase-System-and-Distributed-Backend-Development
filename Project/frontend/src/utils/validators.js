@@ -22,12 +22,6 @@ export function minLen(len) {
     !value || String(value).length >= len ? null : `Must be at least ${len} characters`;
 }
 
-export function isNumber(value) {
-  if (!value && value !== 0) return null;
-  const num = Number(value);
-  return !Number.isNaN(num) ? null : "Must be a number";
-}
-
 export function nonNegative(value) {
   if (!value && value !== 0) return null;
   const num = Number(value);
@@ -38,12 +32,6 @@ export function positive(value) {
   if (!value && value !== 0) return null;
   const num = Number(value);
   return num > 0 ? null : "Must be greater than zero";
-}
-
-export function isDate(value) {
-  if (!value) return null;
-  const d = new Date(value);
-  return !Number.isNaN(d.getTime()) ? null : "Enter a valid date";
 }
 
 export function validate(rules, values) {

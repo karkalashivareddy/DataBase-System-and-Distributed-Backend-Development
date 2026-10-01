@@ -21,7 +21,7 @@ was actually executed; anything not verified is labelled as such.
 Application work delivered in this pass (see `git log` for per-file attribution):
 
 - `Project/backend/src/utils/dates.js` — shared UTC date-boundary helpers
-- `Project/backend/src/utils/transactionProbe.js` — test fixture helper
+- `Project/backend/src/utils/transactionProbe.js` — standalone replica-set capability probe, wired as `npm run probe:transactions`
 - `Project/frontend/src/pages/Adjustments.jsx` — inventory adjustment screen
 - `Project/frontend/src/pages/AuditLog.jsx` — audit trail screen
 - `Project/docs/FINAL_REVIEW_REPORT.md` — this report
@@ -35,15 +35,16 @@ Deleted files (all unreferenced fixtures, recoverable from git history):
 
 ## 2. Architecture verification
 
-- **PASS** — Route layer is the only place authorization is declared; 29 `authorize()` call sites across 4 route files cover every mutating endpoint.
+- **PASS** — Route layer is the only place authorization is declared; 29 `authorize()` call sites across 4 route files cover every endpoint whose access depends on role.
+- **PASS** — 39 routes are registered across `authRoutes`, `catalogRoutes`, `transactionRoutes`, `insightRoutes`, and `adminRoutes`, confirmed by enumerating `router.get/post/patch/delete` declarations.
 - **PASS** — Shared error envelope `{ success, error: { code, message, details } }` is produced centrally and asserted by API tests.
 - **PASS** — Every response total (sale total, COGS, outstanding, stock value, margin) is computed server-side in `src/utils/serializers.js` and `src/services/`, not in the browser.
 - **PASS** — `Batch.quantity` is the single stock source of truth; `src/utils/serializers.js` and `src/models/Batch.js` delegate to one shared `batchStatus()` implementation, and a unit test fails if the two drift apart.
-- **PASS** — All 34 backend source and test files pass `node --check` (0 syntax failures).
+- **PASS** — All 42 backend source and test files pass `node --check` (0 syntax failures).
 
 ## 3. API verification
 
-- **PASS** — 29 routes registered across `authRoutes`, `catalogRoutes`, `transactionRoutes`, `insightRoutes`, `adminRoutes`, confirmed by enumerating `router.get/post/patch/delete` declarations.
+- **PASS** — 39 routes registered across `authRoutes`, `catalogRoutes`, `transactionRoutes`, `insightRoutes`, `adminRoutes`, confirmed by enumerating `router.get/post/patch/delete` declarations.
 - **PASS** — `GET /api/health` reachable unauthenticated; every other route requires a valid JWT.
 - **PASS** — Live API check against the E2E database: `POST /api/auth/login` returned a token, and `GET /api/reports?type=sales&from=2026-09-30&to=2026-10-02` returned exactly 10 rows, the oldest dated `2026-09-30`, confirming the date filter is applied server-side.
 - **PASS** — Unknown body fields are rejected rather than silently ignored.
@@ -66,8 +67,8 @@ Live counts on the demo database:
 | Purchases | 72 |
 | Sales | 101 (4 refunded) |
 | Inventory adjustments | 17 |
-| Notifications | 67 (47 at seed time) |
-| Audit logs | 137 (101 at seed time) |
+| Notifications | 47 (at seed time) |
+| Audit logs | 101 (at seed time) |
 
 Notification and audit counts grow through demo activity by design, since every sale, refund, adjustment, and acknowledgement is recorded.
 
@@ -81,9 +82,10 @@ Notification and audit counts grow through demo activity by design, since every 
 
 ### Rollback behaviour
 
-- **PASS** — Refund restores exactly the batch allocations recorded on the original sale, then clears the sale's COGS snapshot; the sale becomes `Refunded`.
+- **PASS** — Refund restores exactly the batch allocations recorded on the original sale and stamps `refundedAt`; the sale becomes `Refunded`, which removes it from the `Completed` analytics filter, so its revenue and COGS leave the reported totals with it.
 - **PASS** — A second refund is rejected, so stock cannot be credited twice.
 - **PASS** — Insufficient-stock and expired-batch sales fail before any batch is decremented; the E2E suite asserts both rejections.
+- **PASS (corrected this pass)** — The audit row for a purchase, sale, refund or adjustment is now written **inside the same `withTransaction` block** as the stock movement. It was previously written by the controller after the transaction had already committed, which left a window in which a committed quantity was not yet in the trail. The service now takes an audit-document builder from the controller and inserts the row on the session as the last write before commit, so a rollback also rolls back the audit entry.
 
 ## 6. FEFO verification
 
@@ -109,16 +111,31 @@ Notification and audit counts grow through demo activity by design, since every 
 
 ## 9. Browser E2E verification
 
-- **PASS** — 23 named checks passed, 0 failed, plus a final assertion that **no browser console errors** were emitted (24 total assertions).
+- **PASS** — **24 E2E checks executed (23 named scenario checks + 1 browser-console assertion), 0 failed.** The runner reports this as `TOTAL TESTS 24 / PASSED 23 / FAILED 0`.
 
-Coverage: login, logout, dashboard, catalogue, batch creation, partial payment validation, FEFO sale, insufficient-stock rejection, expired-batch rejection, refund, duplicate-refund rejection, adjustment, audit filtering, analytics, report date filtering, CSV export, notification acknowledgement, and RBAC.
+Coverage: login, logout, dashboard, catalogue, supplier dialog, batch creation and
+batch-immutability, purchase with partial payment, partial-payment validation
+(client and server), FEFO sale, insufficient-stock rejection, expired-batch
+rejection, refund, duplicate-refund rejection, adjustment, audit filtering,
+analytics across five ranges, all six report types, report date filtering, CSV
+export, notification acknowledgement **driven through the UI**, and RBAC.
 
-One genuine defect was found and fixed by this suite during the final pass: the report date-filter check captured the *unfiltered* `type=sales` request issued when the report type changed, so it intermittently asserted against stale data. The predicate now requires the `from`/`to` bounds in the URL.
+Defects this suite has caught, all fixed:
+
+1. The report date-filter check captured the *unfiltered* `type=sales` request
+   issued when the report type changed, so it intermittently asserted against
+   stale data. The predicate now requires the `from`/`to` bounds in the URL.
+2. The failure-evidence writer referenced `page` and `consoleErrors`, which were
+   declared inside `main()`. Any failure before the browser launched — the API or
+   dev server not becoming ready, the single most common CI failure — threw a
+   `ReferenceError` and wrote no artifact. Both are now module-scoped, the writer
+   is wrapped so it can never mask the real failure, and the log records whether
+   the browser was ever opened. This was found by deliberately failing the suite.
 
 ## 10. Build verification
 
 - **PASS** — Frontend production build (`vite build`).
-- **PASS** — Backend syntax validation (`node --check` across 34 files).
+- **PASS** — Backend syntax validation (`node --check` across 42 files).
 - **PASS** — `git diff --check` reports no whitespace errors (only informational LF→CRLF notices on Windows).
 
 ## 11. Dependency and security audit
@@ -151,10 +168,11 @@ Remaining: the single search input in each list page relies on `aria-label` rath
 
 - **PASS** — `.github/workflows/ci.yml` is valid YAML with three jobs (`backend`, `frontend`, `e2e`).
 - **PASS** — Chromium install uses the pinned local `playwright-core` CLI (`npx --no-install playwright-core install --with-deps chromium`) rather than resolving an unpinned `playwright` package at run time.
-- **PASS** — The E2E job seeds a disposable database and uploads real failure evidence; the suite now writes `test-results/e2e-failure.log` and `e2e-failure.png`, so the artifact step is no longer a guaranteed-empty directory.
+- **PASS** — The E2E job seeds a disposable database and uploads real failure evidence; the suite writes `test-results/e2e-failure.log` and, when a page was open, `e2e-failure.png`, so the artifact step is no longer a guaranteed-empty directory.
 - **PASS (fixed during corrective pass)** — `test/e2e.mjs` killed only the `npm run dev` wrapper, leaving the Vite grandchild alive. The orphaned dev server kept the stdio pipes open so the runner never exited, which would have hung the CI job until the 6-hour timeout even after all tests passed. Cleanup now terminates the whole process group (`taskkill /T /F` on Windows, negated `SIGTERM` to the detached group elsewhere). Verified locally: 24 checks in 41s, exit code 0, zero leftover processes.
 - **PASS (fixed during corrective pass)** — Run 2 surfaced a genuinely flaky assertion, not a product bug. `test/transactions.integration.test.js` compared `AuditLog.countDocuments()` across the **whole database**, but `node --test` executes `api.test.js` in parallel against that same database, so a concurrent `LOGIN` audit row could land inside the measurement window (CI saw `106 !== 105`; local runs happened to win the race). Every request in that file now sends a suite-specific `User-Agent`, and the assertion filters on it, so it still proves "a rejected sale writes no audit row" while being immune to the sibling suite. The three sibling audit assertions already used `action` + `entityId` filters and were never racy. Verified: two consecutive full runs at 25/25, 0 skipped.
-- **PASS (after correction)** — The workflow executed on GitHub Actions. Run 1 gave `backend` PASS, `frontend` PASS, `e2e` FAIL. The E2E job aborted in preflight with `E2E_MONGODB_URI must point at a disposable database (name containing e2e or test)` because the workflow handed the suite its shared `pharmastock_ci` URI. That guard is deliberate, so the workflow was corrected to seed a separate `pharmastock_e2e` database rather than relaxing the check. This also proved the Docker replica-set startup and the pinned Chromium install both work, which were the two items previously marked unverified.
+- **PASS (after correction)** — The workflow executes on GitHub Actions. Run `36818774843` gave `backend` PASS, `frontend` PASS, `e2e` FAIL: the E2E job aborted in preflight with `E2E_MONGODB_URI must point at a disposable database (name containing e2e or test)` because the workflow handed the suite its shared `pharmastock_ci` URI. That guard is deliberate, so the workflow was corrected to seed a separate `pharmastock_e2e` database rather than relaxing the check. This also proved the Docker replica-set startup and the pinned Chromium install both work.
+- **PASS (current state)** — Run `36823747950` failed during the corrective pass, and the final run [`36824289337`](https://github.com/karkalashivareddy/DataBase-System-and-Distributed-Backend-Development/actions/runs/36824289337) on commit `7e8ffd9` is **success** with all three jobs green.
 
 ## 15. Coursework protection
 
@@ -172,41 +190,42 @@ Remaining: the single search input in each list page relies on `aria-label` rath
 5. No automated accessibility scanner or penetration test.
 6. CSV export is client-side and capped at 1000 rows per report request.
 7. No realtime updates; data refreshes on navigation and after mutations.
-8. CI has run once on GitHub Actions; the first run's E2E job failed on a workflow/seed-database mismatch that has since been corrected.
+8. CI runs on every push; the most recent run is green, but any future workflow or dependency change can break it, and a passing pipeline is not evidence of security.
 
 ## 17. Remaining risks
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| CI E2E job pointed at the shared seed database instead of a disposable one | Resolved | Workflow now gives the `e2e` job its own `pharmastock_e2e` URI; the in-suite guard stays strict |
-| Docker/Mongo startup timing or Chromium install failing on a re-run | Medium | Steps use `until` polling loops; both already succeeded on the first run |
-| Report queries cap at 1000 rows | Low | Documented; acceptable for a demo dataset |
 | Time-zone drift if a future change bypasses `src/utils/dates.js` | Medium | Centralised helper plus a unit test pinning UTC boundaries |
+| Docker/Mongo startup timing or Chromium install failing on a re-run | Medium | Steps use `until` polling loops; both succeeded on the first run |
+| Report queries cap at 1000 rows | Low | Documented; acceptable for a demo dataset |
 | Concurrent sales contention on hot batches | Low | Transactional guards make this safe, not silent |
 | LocalStorage session could be criticized in review | Low | Documented honestly in README, SECURITY.md, and this report |
+| Offset-based pagination degrades on very large collections | Low | Demo-scale data; a cursor design is listed as future work |
 
 ## 18. Final release-gate results
 
 | Gate | Command | Result |
 |---|---|---|
-| Backend tests | `npm test` (`RUN_TRANSACTION_TESTS=true`) | **PASS** — 25 tests, 25 passed, 0 failed |
+| Backend tests | `npm test` (`RUN_TRANSACTION_TESTS=true`) | **PASS** — `tests 25 / pass 25 / fail 0 / skipped 0` |
 | Transaction tests | included in the above | **PASS** |
 | FEFO tests | included | **PASS** |
 | Refund tests | included | **PASS** |
 | RBAC tests | included + E2E | **PASS** |
 | Frontend build | `npm run build` | **PASS** |
-| Browser E2E | `npm run test:e2e` | **PASS** — 23 checks, 0 failed, no console errors |
-| Backend syntax | `node --check` × 34 files | **PASS** — 0 failures |
+| Browser E2E | `npm run test:e2e` | **PASS** — 24 E2E checks executed (23 named scenario checks + 1 browser-console assertion), 0 failed |
+| Backend syntax | `node --check` × 42 files | **PASS** — 0 failures |
 | Database verification | `npm run verify-db` | **PASS** |
-| Seed verification | seed + `VERIFY_SEED_COUNTS=true` | **PASS** |
+| Transaction probe | `npm run probe:transactions` | **PASS** |
 | Dependency audit | `npm audit --audit-level=high` ×2 | **PASS** — 0 vulnerabilities |
 | Secret scan | regex scan of tracked files | **PASS** — no matches |
 | Whitespace check | `git diff --check` | **PASS** |
 | Link scan | documentation links vs filesystem | **PASS** |
 | Accessibility | static review | **PARTIAL** — labels fixed; no scanner run |
 | Coursework protection | `git status -- Practicals` | **PASS** — untouched |
-| CI on GitHub Actions | GitHub Actions `CI` workflow | **PASS after correction** — run 1: backend PASS, frontend PASS, e2e FAIL (workflow pointed E2E at `pharmastock_ci`; guard required `e2e`/`test`). Workflow now seeds `pharmastock_e2e`. |
+| CI on GitHub Actions | `PharmaStock CI` | **PASS** — run [`36824289337`](https://github.com/karkalashivareddy/DataBase-System-and-Distributed-Backend-Development/actions/runs/36824289337) on commit `7e8ffd9`: backend, frontend and e2e all green |
 
-**Overall: the local release gate is PASS.** The single outstanding item is the
-first execution of the GitHub Actions workflow, which cannot be verified without
-pushing.
+**Overall: the release gate is PASS locally and in CI.** The two remaining
+non-PASS items are inherent to the scope and are labelled rather than hidden:
+accessibility has no automated scanner, and there is no deployed instance, so no
+production claim is made.
