@@ -196,12 +196,13 @@ The pipeline **has** executed on GitHub Actions and the latest run is green.
 | | |
 |---|---|
 | Workflow | `PharmaStock CI` |
-| Run | [`36824289337`](https://github.com/karkalashivareddy/DataBase-System-and-Distributed-Backend-Development/actions/runs/36824289337) |
-| Commit | `7e8ffd9` |
+| Run | [`36886529034`](https://github.com/karkalashivareddy/DataBase-System-and-Distributed-Backend-Development/actions/runs/36886529034) |
+| Commit | `39b49bb` |
 | Conclusion | **success** — backend PASS, frontend PASS, E2E PASS |
 
 History, for context rather than as current status:
 
+- Run [`36824289337`](https://github.com/karkalashivareddy/DataBase-System-and-Distributed-Backend-Development/actions/runs/36824289337) on `7e8ffd9` was the first fully green run.
 - Runs `36818774843` and `36823747950` failed. The first because the E2E job was handed the shared `pharmastock_ci` URI, which the suite's disposable-database guard correctly refused; the second during the corrective pass. Both were workflow/tooling problems, not application defects.
 - The fix was to give the `e2e` job its own `pharmastock_e2e` database rather than weakening the guard.
 - Run `36162711149` predates the CI configuration and passed on a smaller job set; it is not the current pipeline.

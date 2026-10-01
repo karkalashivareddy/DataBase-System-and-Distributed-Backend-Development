@@ -183,12 +183,29 @@ Root cause was workflow configuration only, corrected so the `e2e` job seeds
 
 **CI run 3 (`36824289337`, commit `7e8ffd9`): success.**
 
+**CI run 4 (`36886529034`, commit `39b49bb`, current HEAD): success.**
+
 ```text
 PharmaStock CI — completed / success
   backend  PASS
   frontend PASS
   e2e       PASS
-  Duration  1m53s
+  Duration  1m49s
+```
+
+CI output for the current HEAD, quoted from the run logs:
+
+```text
+# backend job
+Seed CI database      users 7 / medicines 34 / batches 72 / sales 101
+                      notifications 47 / auditLogs 101
+Verify CI database    Database verification: PASS
+Run backend tests     tests 25 / pass 25 / fail 0 / skipped 0
+npm audit             found 0 vulnerabilities
+
+# e2e job
+Run browser E2E suite TOTAL TESTS 24 / PASSED 23 / FAILED 0
+                      Browser E2E VERIFIED: YES
 ```
 
 This is the current verified state. Re-run the workflow to reproduce it.
@@ -233,7 +250,7 @@ verification, so this is a static best-effort pass, not a WCAG conformance claim
 |---|---|
 | Backend tests (incl. transaction, FEFO, refund, RBAC) | PASS — `tests 25 / pass 25 / fail 0 / skipped 0` |
 | Frontend build | PASS |
-| Browser E2E | PASS — 24 E2E checks executed (23 named + 1 console assertion), 0 failed |
+| Browser E2E | PASS — 24 E2E checks executed (23 named scenario checks + 1 browser-console assertion), 0 failed |
 | Backend syntax validation | PASS — 42 files |
 | Database verification | PASS |
 | Seed verification | PASS |
@@ -245,4 +262,4 @@ verification, so this is a static best-effort pass, not a WCAG conformance claim
 | Documentation consistency | PASS |
 | Coursework protection | PASS |
 | Accessibility | PARTIAL (static pass, no scanner) |
-| CI on GitHub Actions | PASS — run `36824289337` on `7e8ffd9`, all three jobs green |
+| CI on GitHub Actions | PASS — run `36886529034` on `39b49bb`, all three jobs green |

@@ -321,8 +321,8 @@ narrative is in [`FINAL_REVIEW_REPORT.md`](FINAL_REVIEW_REPORT.md).
   production build should use an `HttpOnly`, `Secure` cookie (which then needs
   CSRF protection too).
 - Settings are per-browser, not per-user.
-- CI runs on every push. The latest run (`36824289337`, commit `7e8ffd9`) passed all
-  three jobs; two earlier runs failed and were corrected rather than papered over.
+- CI runs on every push. The latest run (`36886529034`, commit `39b49bb`) passed all
+  three jobs; earlier runs failed and were corrected rather than papered over.
 - Accessibility was reviewed statically; no axe or screen-reader pass was run, and
   no penetration test or security scanner has been run at all.
 - Reports cap at 1000 rows per request and CSV export is client-side.
