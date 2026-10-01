@@ -21,6 +21,11 @@ function idOf(value) {
 const enabled = process.env.RUN_TRANSACTION_TESTS === "true" && Boolean(process.env.MONGODB_URI && process.env.SEED_PASSWORD);
 const password = process.env.SEED_PASSWORD;
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+// `node --test` runs api.test.js and this file in parallel against the same
+// database, so any assertion about the total number of audit rows races with
+// the other suite. Every request here carries a suite-specific User-Agent and
+// audit assertions are scoped to it, which keeps them exact.
+const suiteUserAgent = `pharmastock-ci-${suffix}`;
 let server;
 let baseUrl;
 let adminToken;
@@ -34,7 +39,7 @@ let rollbackBatch;
 let createdEntityIds = [];
 
 async function request(path, options = {}) {
-  const response = await fetch(baseUrl + path, options);
+  const response = await fetch(baseUrl + path, { ...options, headers: { "User-Agent": suiteUserAgent, ...(options.headers || {}) } });
   const body = await response.json();
   return { status: response.status, body };
 }
@@ -110,13 +115,13 @@ test("insufficient and expired stock leave inventory and sales unchanged", async
   if (!enabled) return t.skip("set RUN_TRANSACTION_TESTS=true with a replica-set MONGODB_URI");
   const before = await Batch.find({ medicine: medicine._id }).sort({ batchNo: 1 }).lean();
   const saleCount = await Sale.countDocuments({ medicine: medicine._id });
-  const auditCount = await AuditLog.countDocuments();
+  const auditCount = await AuditLog.countDocuments({ userAgent: suiteUserAgent });
   const available = before.filter((batch) => batch.expiryDate >= day(0) && batch.quantity > 0).reduce((sum, batch) => sum + batch.quantity, 0);
   const insufficient = await request("/sales", { method: "POST", headers: auth(true), body: JSON.stringify({ medicineId: String(medicine._id), quantity: available + 1 }) });
   assert.equal(insufficient.status, 409);
   assert.deepEqual(await Batch.find({ medicine: medicine._id }).sort({ batchNo: 1 }).lean(), before);
   assert.equal(await Sale.countDocuments({ medicine: medicine._id }), saleCount);
-  assert.equal(await AuditLog.countDocuments(), auditCount);
+  assert.equal(await AuditLog.countDocuments({ userAgent: suiteUserAgent }), auditCount);
   const expiredMedicine = await Medicine.create({ name: `CI Expired ${suffix}`, generic: "Expired", category: "Other", manufacturer: "CI", unitPrice: 1, reorderLevel: 1 });
   const expired = await Batch.create({ batchNo: `CI-EXPIRED-${suffix}`, medicine: expiredMedicine._id, supplier: supplier._id, manufactureDate: day(-60), expiryDate: day(-1), quantity: 7, costPerUnit: 1 });
   const expiredResult = await request("/sales", { method: "POST", headers: auth(true), body: JSON.stringify({ medicineId: String(expiredMedicine._id), quantity: 1 }) });

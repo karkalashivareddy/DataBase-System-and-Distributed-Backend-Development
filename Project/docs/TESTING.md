@@ -74,6 +74,12 @@ $env:E2E_PASSWORD='<local test password>'
 npm run test:e2e
 ```
 
+`node --test` runs `api.test.js`, `transactions.integration.test.js`, and
+`unit.test.js` in parallel against one database, so a test must never assert on
+global row counts. The transaction suite sends a suite-specific `User-Agent` on
+every request and scopes its audit assertions to it; stock, sale, and batch
+assertions are already scoped to the entities the suite created.
+
 Optional: `E2E_API_PORT`, `E2E_WEB_PORT`, `E2E_JWT_SECRET`, `E2E_CHROME_PATH`.
 
 The suite covers login and logout, the dashboard, catalogue CRUD, batch creation,
