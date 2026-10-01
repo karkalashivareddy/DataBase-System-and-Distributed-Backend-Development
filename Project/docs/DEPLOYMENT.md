@@ -24,7 +24,7 @@ Serve `dist/` from a static host or reverse proxy. Configure `VITE_API_URL` at b
 
 ## Production API
 
-- Deploy `Project/backend` on Node.js 20.19 or newer.
+- Deploy `Project/backend` on Node.js 24 or newer (CI pins `24.19.0`).
 - Supply environment variables through the host secret manager.
 - Use MongoDB Atlas or another replica-set deployment.
 - Configure TLS, CORS, request limits, and process monitoring.

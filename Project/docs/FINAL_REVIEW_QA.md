@@ -3,7 +3,7 @@
 Recorded output from the final verification pass. Every line below is copied
 from a real command run on 2026-10-01 against a local MongoDB replica set.
 
-Environment: Windows, Node.js 24.19.0 local (CI pins 20.19.0), MongoDB replica
+Environment: Windows, Node.js 24.19.0 local (CI pins 24.19.0), MongoDB replica
 set `rs0` on port 27018, demo database `pharma_stock_management`, disposable E2E
 database `pharmastock_e2e`.
 
@@ -145,8 +145,13 @@ npx --no-install playwright-core --version
 Version 1.63.0
 ```
 
-**The workflow has not been executed on GitHub Actions.** Treat CI as
-unverified until the first green run appears.
+**CI run 1 (initial release commit): `backend` PASS, `frontend` PASS, `e2e` FAIL.**
+The E2E job failed before any browser test with
+`E2E_MONGODB_URI must point at a disposable database (name containing e2e or test)`.
+The workflow had passed the seeded URI `pharmastock_ci` to the E2E job; the guard in
+`Project/frontend/test/e2e.mjs` correctly rejected it, and the guard was not weakened.
+Root cause is workflow configuration only, now corrected so the `e2e` job seeds
+`pharmastock_e2e`. The corrected run is verified in the corrective commit recorded in git history.
 
 ## 9. Accessibility review (static)
 
@@ -196,4 +201,4 @@ verification, so this is a static best-effort pass, not a WCAG conformance claim
 | Documentation consistency | PASS |
 | Coursework protection | PASS |
 | Accessibility | PARTIAL (static pass, no scanner) |
-| CI on GitHub Actions | NOT RUN |
+| CI on GitHub Actions | run 1: backend PASS, frontend PASS, e2e FAIL (disposable-database guard tripped by workflow config); fixed in the corrective commit |

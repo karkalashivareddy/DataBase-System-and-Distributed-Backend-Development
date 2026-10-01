@@ -1,4 +1,4 @@
-﻿# Medicine Stock Management & Analytics Portal for Pharmaceuticals
+# Medicine Stock Management & Analytics Portal for Pharmaceuticals
 
 ## Project Review – 2/3
 
@@ -62,4 +62,4 @@ See the root [`README.md`](../README.md) for local setup. API details are in [`d
 - [Final review report](docs/FINAL_REVIEW_REPORT.md)
 - [Final QA evidence](docs/FINAL_REVIEW_QA.md)
 - [Final demo script](docs/FINAL_DEMO_SCRIPT.md)
-- [Review presentation](docs/Medicine_Stock_Management_Review2_FINAL_MASTER.pptx)
+- [Application screenshots](docs/screenshots/)

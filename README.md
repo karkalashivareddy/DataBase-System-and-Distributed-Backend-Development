@@ -173,17 +173,19 @@ The E2E suite starts the API and the Vite dev server itself, refuses to run agai
 
 ## CI/CD
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs three jobs on Node `20.19.0`:
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs three jobs on Node `24.19.0`:
 
-1. **backend** — `npm ci`, `npm test`, `npm audit --audit-level=high`.
+1. **backend** — `npm ci`, guarded seed, `verify-db`, `npm test` with transaction tests enabled, `npm audit --audit-level=high`.
 2. **frontend** — `npm ci`, `npm run build`, `npm audit --audit-level=high`.
-3. **e2e** — installs Chromium via `playwright-core`, starts a `mongo:7.0` replica set in Docker, seeds a disposable database, runs the browser suite, and uploads failure evidence on failure.
+3. **e2e** — installs Chromium via `playwright-core`, starts a `mongo:7.0` replica set in Docker, seeds a disposable `pharmastock_e2e` database, runs the browser suite, and uploads failure evidence on failure.
+
+JWT secret and seed password are generated per run and registered with GitHub Actions log masking, so no credential is stored in the repository. The workflow token is read-only.
 
 > CI configuration is committed and syntax-checked locally. It has **not** been executed on GitHub Actions yet, so treat the pipeline as unverified until the first green run appears in the Actions tab.
 
 ## Local setup
 
-Prerequisites: Node.js 18+ (CI pins 20.19.0) and a **MongoDB replica set**.
+Prerequisites: Node.js 18+ (CI pins `24.19.0`) and a **MongoDB replica set**.
 
 ### MongoDB replica set (required for stock writes)
 
@@ -343,18 +345,35 @@ Use `karkala@pharmastock.in` for the full demo and `sateesh@pharmastock.in` to d
 
 ## Screenshots
 
-<!-- TODO: capture and paste screenshots before the final PPT:
-     1. Login screen
-     2. Dashboard with KPI cards and charts
-     3. Medicines catalogue
-     4. Purchase form
-     5. Sale form with FEFO allocation result
-     6. Refund + adjustment screens
-     7. Analytics page
-     8. Reports with CSV export
-     9. Audit log
-     10. Viewer-role restriction
-     Save them under Project/docs/screenshots/ and reference them here. -->
+All screenshots below are real captures of the running application against a seeded database. They live in [`Project/docs/screenshots/`](Project/docs/screenshots).
+
+| Login | Dashboard |
+| --- | --- |
+| ![Login screen](Project/docs/screenshots/01-login.png) | ![Dashboard with KPI cards and charts](Project/docs/screenshots/02-dashboard.png) |
+
+| Medicines | Batches |
+| --- | --- |
+| ![Medicines catalogue](Project/docs/screenshots/03-medicines.png) | ![Batch tracking](Project/docs/screenshots/04-batches.png) |
+
+| Expiry tracking | Purchases |
+| --- | --- |
+| ![Expiry tracking](Project/docs/screenshots/05-expiry.png) | ![Purchase entry](Project/docs/screenshots/06-purchases.png) |
+
+| Sales with FEFO allocation | Stock adjustments |
+| --- | --- |
+| ![Sales and FEFO allocation](Project/docs/screenshots/07-sales.png) | ![Stock adjustments](Project/docs/screenshots/08-adjustments.png) |
+
+| Analytics | Reports |
+| --- | --- |
+| ![Analytics page](Project/docs/screenshots/09-analytics.png) | ![Reports with CSV export](Project/docs/screenshots/10-reports.png) |
+
+| Audit log | Suppliers |
+| --- | --- |
+| ![Audit log](Project/docs/screenshots/11-audit-log.png) | ![Suppliers](Project/docs/screenshots/12-suppliers.png) |
+
+| Low stock |
+| --- |
+| ![Low stock alerts](Project/docs/screenshots/13-low-stock.png) |
 
 ## Known limitations
 
@@ -364,7 +383,7 @@ Use `karkala@pharmastock.in` for the full demo and `sateesh@pharmastock.in` to d
 - **No pagination beyond explicit `page`/`limit`** on list endpoints; the UI pages client-side for some tables.
 - **CSV export is client-side** from already-fetched rows; reports cap at 1000 rows per request.
 - **Realtime updates are absent** — data refreshes on navigation and after mutations, not via websockets.
-- **CI is unexecuted** — the workflow has not yet run on GitHub Actions.
+- **No CI secret storage** — CI generates its JWT secret and seed password per run rather than using repository secrets, so a fork's first run works without configuration.
 - **No automated accessibility scanner** — accessibility was reviewed statically (label/control association, focus order, dialog semantics) rather than with axe or a screen reader.
 
 ## Future improvements

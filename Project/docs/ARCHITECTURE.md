@@ -13,7 +13,7 @@ Browser
   -> MongoDB
 ```
 
-The frontend contains no production imports from `src/data/`. The files in that directory are retained only as historical/demo fixtures and must not be used by application code.
+The frontend has no fixture data at all. The historical `src/data/` sample modules and the unreferenced `src/pages/Home.jsx` landing page were removed after confirming zero imports, so every value rendered by a screen comes from the API and the database.
 
 ## Backend layers
 

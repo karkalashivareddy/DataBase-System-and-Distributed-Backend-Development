@@ -30,13 +30,30 @@ const backend = spawn(process.execPath, ["src/server.js"], {
   cwd: backendDir,
   env: { ...process.env, PORT: String(apiPort), MONGODB_URI: mongoUri, JWT_SECRET: jwtSecret, CLIENT_ORIGIN: webBase },
   stdio: ["ignore", "pipe", "pipe"],
+  detached: process.platform !== "win32",
 });
 const frontend = spawn(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(webPort)], {
   cwd: frontendDir,
   env: { ...process.env, VITE_API_URL: apiBase },
   stdio: ["ignore", "pipe", "pipe"],
   shell: process.platform === "win32",
+  detached: process.platform !== "win32",
 });
+// `npm run dev` spawns Vite as a grandchild, so killing only the npm wrapper
+// leaves an orphan holding the pipes open and the runner never exits (which
+// hangs CI until the job times out). Terminate the whole process group.
+function killTree(child) {
+  if (!child || child.exitCode !== null) return;
+  if (process.platform === "win32") {
+    spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+  } else {
+    try {
+      process.kill(-child.pid, "SIGTERM");
+    } catch {
+      child.kill("SIGTERM");
+    }
+  }
+}
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const passedChecks = [];
 let browser;
@@ -485,6 +502,6 @@ try {
   }
 } finally {
   if (browser) await browser.close();
-  backend.kill();
-  frontend.kill();
+  killTree(backend);
+  killTree(frontend);
 }

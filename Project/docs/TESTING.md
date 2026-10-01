@@ -87,6 +87,12 @@ log). It finishes by asserting that **no browser console errors** occurred.
 On failure it writes `test-results/e2e-failure.log` and
 `test-results/e2e-failure.png`, which CI uploads as an artifact.
 
+The runner starts the API and the Vite dev server itself and tears down the
+**whole process group** when finished (`taskkill /T /F` on Windows, negated
+`SIGTERM` elsewhere). Killing only the `npm run dev` wrapper would orphan Vite,
+which keeps the pipes open and prevents the runner from exiting — the job would
+appear to pass its tests and then hang until the CI timeout.
+
 ## Transaction requirement
 
 A standalone MongoDB server can serve catalogue reads but **cannot** run stock
@@ -115,4 +121,4 @@ Recorded on the final review pass. See
 | `npm run test:e2e` | 23 checks passed, 0 failed, plus the console-error assertion |
 | `npm audit --audit-level=high` (backend) | 0 vulnerabilities |
 | `npm audit --audit-level=high` (frontend) | 0 vulnerabilities |
-| CI workflow on GitHub Actions | **not yet executed** |
+| CI workflow on GitHub Actions | `backend` and `frontend` jobs pass; the `e2e` job failed because the workflow seeded `pharmastock_ci` while the suite refuses any database name without `e2e`/`test`. Fixed by giving the `e2e` job its own disposable `pharmastock_e2e` URI. |

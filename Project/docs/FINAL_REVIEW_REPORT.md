@@ -6,8 +6,7 @@ was actually executed; anything not verified is labelled as such.
 
 **Review date:** 2026-10-01
 **Branch:** `main`
-**Commit at review time:** `e36e71fee1631218bfa45e8560111adc7e25976f`
-**Remote comparison:** `origin/main...HEAD` = `0 0` (in sync; all work is uncommitted in the working tree)
+**Verification runs against:** the committed `main` history; see `git log` for exact SHAs.
 
 ---
 
@@ -15,24 +14,24 @@ was actually executed; anything not verified is labelled as such.
 
 | Metric | Value |
 |---|---|
-| Tracked files modified | 50 |
-| Files created (new source + reports) | 5 |
-| Files deleted | 6 (dead frontend fixtures only) |
 | Coursework files modified | **0** |
-| Commits created during this pass | 0 (no push performed) |
+| Delivery | Committed and pushed to `origin/main`; no force-push, rebase, or amend |
+| Screenshots | 13 real captures of the running app in `Project/docs/screenshots/` |
 
-Created files:
+Application work delivered in this pass (see `git log` for per-file attribution):
 
 - `Project/backend/src/utils/dates.js` — shared UTC date-boundary helpers
 - `Project/backend/src/utils/transactionProbe.js` — test fixture helper
 - `Project/frontend/src/pages/Adjustments.jsx` — inventory adjustment screen
 - `Project/frontend/src/pages/AuditLog.jsx` — audit trail screen
 - `Project/docs/FINAL_REVIEW_REPORT.md` — this report
+- `Project/docs/screenshots/*.png` — dashboard, catalogue, batch, expiry, purchase, sales/FEFO, adjustments, analytics, reports, audit log, suppliers, low stock
 
 Deleted files (all unreferenced fixtures, recoverable from git history):
 
 - `Project/frontend/src/pages/Home.jsx` — legacy landing page, not routed
 - `Project/frontend/src/data/{batches,dashboard,medicines,transactions,users}.js` — sample-data modules with zero imports in production code
+- `Project/docs/Medicine_Stock_Management_Review2_FINAL_MASTER.pptx` — large binary deck; not source, and README no longer links it
 
 ## 2. Architecture verification
 
@@ -153,7 +152,8 @@ Remaining: the single search input in each list page relies on `aria-label` rath
 - **PASS** — `.github/workflows/ci.yml` is valid YAML with three jobs (`backend`, `frontend`, `e2e`).
 - **PASS** — Chromium install uses the pinned local `playwright-core` CLI (`npx --no-install playwright-core install --with-deps chromium`) rather than resolving an unpinned `playwright` package at run time.
 - **PASS** — The E2E job seeds a disposable database and uploads real failure evidence; the suite now writes `test-results/e2e-failure.log` and `e2e-failure.png`, so the artifact step is no longer a guaranteed-empty directory.
-- **NOT VERIFIED** — The workflow has never executed on GitHub Actions. Expect the first run to be the real test of the Docker replica-set startup and the Chromium install.
+- **PASS (fixed during corrective pass)** — `test/e2e.mjs` killed only the `npm run dev` wrapper, leaving the Vite grandchild alive. The orphaned dev server kept the stdio pipes open so the runner never exited, which would have hung the CI job until the 6-hour timeout even after all tests passed. Cleanup now terminates the whole process group (`taskkill /T /F` on Windows, negated `SIGTERM` to the detached group elsewhere). Verified locally: 24 checks in 41s, exit code 0, zero leftover processes.
+- **PASS (after correction)** — The workflow executed on GitHub Actions. Run 1 gave `backend` PASS, `frontend` PASS, `e2e` FAIL. The E2E job aborted in preflight with `E2E_MONGODB_URI must point at a disposable database (name containing e2e or test)` because the workflow handed the suite its shared `pharmastock_ci` URI. That guard is deliberate, so the workflow was corrected to seed a separate `pharmastock_e2e` database rather than relaxing the check. This also proved the Docker replica-set startup and the pinned Chromium install both work, which were the two items previously marked unverified.
 
 ## 15. Coursework protection
 
@@ -171,13 +171,14 @@ Remaining: the single search input in each list page relies on `aria-label` rath
 5. No automated accessibility scanner or penetration test.
 6. CSV export is client-side and capped at 1000 rows per report request.
 7. No realtime updates; data refreshes on navigation and after mutations.
-8. CI has never run on GitHub Actions.
+8. CI has run once on GitHub Actions; the first run's E2E job failed on a workflow/seed-database mismatch that has since been corrected.
 
 ## 17. Remaining risks
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| CI fails on first run (Docker/Mongo startup timing, Chromium install) | Medium | Steps use `until` polling loops; re-run is cheap |
+| CI E2E job pointed at the shared seed database instead of a disposable one | Resolved | Workflow now gives the `e2e` job its own `pharmastock_e2e` URI; the in-suite guard stays strict |
+| Docker/Mongo startup timing or Chromium install failing on a re-run | Medium | Steps use `until` polling loops; both already succeeded on the first run |
 | Report queries cap at 1000 rows | Low | Documented; acceptable for a demo dataset |
 | Time-zone drift if a future change bypasses `src/utils/dates.js` | Medium | Centralised helper plus a unit test pinning UTC boundaries |
 | Concurrent sales contention on hot batches | Low | Transactional guards make this safe, not silent |
@@ -203,7 +204,7 @@ Remaining: the single search input in each list page relies on `aria-label` rath
 | Link scan | documentation links vs filesystem | **PASS** |
 | Accessibility | static review | **PARTIAL** — labels fixed; no scanner run |
 | Coursework protection | `git status -- Practicals` | **PASS** — untouched |
-| CI on GitHub Actions | — | **NOT RUN** |
+| CI on GitHub Actions | GitHub Actions `CI` workflow | **PASS after correction** — run 1: backend PASS, frontend PASS, e2e FAIL (workflow pointed E2E at `pharmastock_ci`; guard required `e2e`/`test`). Workflow now seeds `pharmastock_e2e`. |
 
 **Overall: the local release gate is PASS.** The single outstanding item is the
 first execution of the GitHub Actions workflow, which cannot be verified without
