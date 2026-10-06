@@ -143,7 +143,7 @@ Every number below is copied from real command output on this commit.
 | Browser E2E | `npm run test:e2e` | `TOTAL TESTS 24 / PASSED 23 / FAILED 0` |
 | Dependency audit | `npm audit --audit-level=high` (backend) | `found 0 vulnerabilities` |
 | Dependency audit | `npm audit --audit-level=high` (frontend) | `found 0 vulnerabilities` |
-| CI | GitHub Actions `PharmaStock CI` | **success** — run [`36886529034`](https://github.com/karkalashivareddy/DataBase-System-and-Distributed-Backend-Development/actions/runs/36886529034) on commit `39b49bb`, all three jobs green |
+| CI | GitHub Actions `PharmaStock CI` | **success** — run [`36888031250`](https://github.com/karkalashivareddy/DataBase-System-and-Distributed-Backend-Development/actions/runs/36888031250) on commit `1c5ca85`, all three jobs green |
 
 **Canonical E2E wording.** The runner prints `TOTAL TESTS 24`, `PASSED 23`,
 `FAILED 0`. It reports 23 named scenario checks plus one final assertion that the
@@ -156,4 +156,4 @@ job was handed the shared `pharmastock_ci` URI and the suite's disposable-databa
 guard refused it; the second during the corrective pass. The guard was kept
 strict and the workflow was given its own `pharmastock_e2e` database instead.
 Run `36824289337` was the first green run; the current HEAD is green on
-`36886529034`. Full evidence log: [`FINAL_REVIEW_QA.md`](FINAL_REVIEW_QA.md).
+`36888031250`. Full evidence log: [`FINAL_REVIEW_QA.md`](FINAL_REVIEW_QA.md).

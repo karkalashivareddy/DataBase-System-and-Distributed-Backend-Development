@@ -183,7 +183,9 @@ Root cause was workflow configuration only, corrected so the `e2e` job seeds
 
 **CI run 3 (`36824289337`, commit `7e8ffd9`): success.**
 
-**CI run 4 (`36886529034`, commit `39b49bb`, current HEAD): success.**
+**CI run 4 (`36886529034`, commit `39b49bb`): success.**
+
+**CI run 6 (`36888031250`, commit `1c5ca85`, current HEAD): success.**
 
 ```text
 PharmaStock CI — completed / success
@@ -262,4 +264,4 @@ verification, so this is a static best-effort pass, not a WCAG conformance claim
 | Documentation consistency | PASS |
 | Coursework protection | PASS |
 | Accessibility | PARTIAL (static pass, no scanner) |
-| CI on GitHub Actions | PASS — run `36886529034` on `39b49bb`, all three jobs green |
+| CI on GitHub Actions | PASS — run `36888031250` on `1c5ca85`, all three jobs green |
